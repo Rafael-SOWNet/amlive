@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AngouriMath wasm probes</title>
+<link rel="stylesheet" href="probe.css">
+<main>
+  <h1>AngouriMath under WebAssembly: what loading it costs</h1>
+  <p>Three copies of one tiny .NET 10 WebAssembly app, differing only in the AngouriMath kernel.
+  Each loads the runtime, calls an exported function twice, and shows how long each step took and
+  how many bytes came over the network.</p>
+  <ul>
+    <li><a href="base/">baseline</a>: no AngouriMath, the bare runtime</li>
+    <li><a href="trimmed/">trimmed</a>: the kernel trimmed to what parsing and <code>Simplify</code> reach</li>
+    <li><a href="whole/">whole</a>: the kernel kept whole</li>
+  </ul>
+  <p>The first visit downloads everything; a reload takes most files from the browser's cache. Each
+  page has a <em>Run again cold</em> link that downloads and compiles everything again, which is
+  the number that matters for a first-time visitor, on a phone above all.</p>
+  <p class="note">The measurements these reproduce, and the question they bear on:
+  <a href="https://github.com/asc-community/AngouriMath/issues/2296">AngouriMath#2296</a> and
+  <a href="https://github.com/asc-community/AngouriMath/issues/1692">AngouriMath#1692</a>.
+  Built from AngouriMath master <code>aef5535</code>, .NET SDK 10.0.402, Release, <code>TrimMode=full</code>,
+  no AOT.</p>
+  <p><a href="../">The AngouriMath Live demos</a> run the same way.</p>
+</main>
