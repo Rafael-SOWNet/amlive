@@ -1,13 +1,36 @@
 import { $, html, setChip, presets, codeBlock, CODE_BLOCK, collapsible, linkProgram, fitCanvas, loop, fullscreenTriangle, FULLSCREEN_VS } from '../shared.js';
 
-// Eight wave trains, longest first: wavelength in metres, heading relative to the wind in
-// radians, and a fixed offset so that their crests do not all meet at the origin.
-const WAVES = () => [
-  [42.0, 0.00, 13, 71], [27.0, -0.42, 59, 5], [17.5, 0.36, 31, 47], [11.3, -0.68, 83, 23],
-  [7.3, 0.60, 7, 61], [4.7, -0.22, 41, 89], [3.0, 0.82, 67, 17], [1.9, -0.55, 29, 37],
-].map(([lambda, turn, ox, oz], i) => ({
-  lambda, k: 2 * Math.PI / lambda, turn, off: [ox, oz], weight: 1 - 0.07 * i, t: 0, omega: NaN,
-}));
+// A wind sea as WAVE_COUNT wave trains, longest first. A handful of plane waves interfere into a
+// lattice the eye finds at once; a sea is a spectrum. So the wavelengths are one per band of a
+// logarithmic split of LONGEST..SHORTEST, jittered within the band so that none is a multiple of
+// another; the headings spread about the wind, wider for shorter waves; each train starts at a
+// random phase (an offset of the surface point); and the weights follow Pierson–Moskowitz.
+// In deep water that spectrum gives each logarithmic band the same slope variance above the peak
+// and exp(-1.25 (λ/λp)²) of it below, so weight² is that factor, normalised to a sum of 1: the
+// slider is then the sea's RMS slope. Seeded, so the sea is the same on every visit.
+const WAVE_COUNT = 32, LONGEST = 80, SHORTEST = 1.2, PEAK = 35;
+const WAVES = () => {
+  let seed = 0x5eed;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const gaussian = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
+  const waves = Array.from({ length: WAVE_COUNT }, (_, i) => {
+    const lambda = LONGEST * Math.pow(SHORTEST / LONGEST, (i + random()) / WAVE_COUNT);
+    const spread = 0.25 + 0.55 * i / (WAVE_COUNT - 1);
+    return {
+      lambda, k: 2 * Math.PI / lambda, turn: spread * gaussian(), off: [2000 * random(), 2000 * random()],
+      weight: Math.exp(-0.625 * (lambda / PEAK) ** 2), t: 0, omega: NaN,
+    };
+  });
+  const norm = Math.hypot(...waves.map((w) => w.weight));
+  for (const w of waves) w.weight /= norm;
+  return waves;
+};
+const LONG_LABEL = `${Math.round(WAVES()[0].lambda)} m`, SHORT_LABEL = `${WAVES()[WAVE_COUNT - 1].lambda.toFixed(1)} m`;
 
 const PRESETS = [
   { label: 'Any depth', formula: 'sqrt(g k (1 - 2/(e^(2 k h) + 1)))',
@@ -51,8 +74,9 @@ const SUN = (() => { const v = [0.0, 0.22, -1.0], l = Math.hypot(...v); return v
 const HEADER = `#version 300 es
 precision highp float;
 precision highp int;
-uniform vec4 uWave[8];   // A, k, t, unused
-uniform vec4 uDirOff[8]; // direction of travel, offset of the surface point
+#define WAVE_COUNT ${WAVE_COUNT}
+uniform vec4 uWave[WAVE_COUNT];   // A, k, t, unused
+uniform vec4 uDirOff[WAVE_COUNT]; // direction of travel, offset of the surface point
 uniform float uDepth;
 uniform vec3 uCam;
 uniform vec3 uSun;
@@ -82,7 +106,7 @@ void main() {
   vec2 xz = uCam.xz + sign(u) * u * u * uExtent;
   float cell = 4.0 * max(abs(u.x), abs(u.y)) * uExtent / ${GRID.toFixed(1)};
   float y = 0.0;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < WAVE_COUNT; i++) {
     float lambda = 6.2831853 / uWave[i].y;
     float w = 1.0 - smoothstep(0.25 * lambda, 0.5 * lambda, cell);
     if (w > 0.0)
@@ -105,7 +129,7 @@ void main() {
   float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
   vec2 slope = vec2(0.0);
   bool broken = false;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < WAVE_COUNT; i++) {
     float lambda = 6.2831853 / uWave[i].y;
     float w = 1.0 - smoothstep(0.15 * lambda, 0.5 * lambda, footprint);
     if (w <= 0.0) continue;
@@ -170,7 +194,7 @@ const MARKUP = `
         <input id="waves-depth" type="range" min="0" max="1000" step="1" value="620">
       </div>
       <div class="slider">
-        <label for="waves-steep">Steepness k A of each wave</label><output data-steep-out></output>
+        <label for="waves-steep">Steepness of the sea, RMS of k A</label><output data-steep-out></output>
         <input id="waves-steep" type="range" min="0" max="100" step="1" value="50">
       </div>
       <div class="slider">
@@ -181,8 +205,8 @@ const MARKUP = `
     </div>
     <div class="section">
       <dl class="stats">
-        <div><dt>42 m waves travel at</dt><dd data-c-long>–</dd></div>
-        <div><dt>1.9 m waves travel at</dt><dd data-c-short>–</dd></div>
+        <div><dt>${LONG_LABEL} waves travel at</dt><dd data-c-long>–</dd></div>
+        <div><dt>${SHORT_LABEL} waves travel at</dt><dd data-c-short>–</dd></div>
         <div><dt>k h ranges over</dt><dd data-kh>–</dd></div>
       </dl>
       <p class="note" data-regime></p>
@@ -192,7 +216,7 @@ const MARKUP = `
       <summary>Generated shader</summary>
       ${CODE_BLOCK}
     </details>
-    <p class="foot">Linear (Airy) waves: eight trains from 1.9 m to 42 m long, amplitudes capped at a fifth of the depth. The phase is k (dx px + dz pz) − ω t, for the surface point (px, pz) and the direction of travel (dx, dz). Units declared to AngouriMath: A, h, px and pz in L; k in L⁻¹; g in L T⁻²; t in T.</p>
+    <p class="foot">Linear (Airy) waves: ${WAVE_COUNT} trains from ${SHORT_LABEL} to ${LONG_LABEL} long, weighted by the Pierson–Moskowitz spectrum with its peak at ${PEAK} m, headings spread about the wind and random phases; amplitudes capped at a fifth of the depth. The phase is k (dx px + dz pz) − ω t, for the surface point (px, pz) and the direction of travel (dx, dz). Units declared to AngouriMath: A, h, px and pz in L; k in L⁻¹; g in L T⁻²; t in T.</p>
   </div>
 </aside>`;
 
@@ -206,7 +230,7 @@ export function mount(section, am) {
 
   const waves = WAVES();
   const state = {
-    depth: 8, steep: 0.05, heading: Math.PI / 2,
+    depth: 8, steep: 0.1, heading: Math.PI / 2,
     playing: !matchMedia('(prefers-reduced-motion: reduce)').matches, yaw: 0, pitch: -0.13,
   };
 
@@ -276,17 +300,19 @@ export function mount(section, am) {
     return shallow.map((s, i) => s + (deep[i] - s) * t);
   }
 
-  const waveData = new Float32Array(32), dirData = new Float32Array(32);
+  const waveData = new Float32Array(4 * WAVE_COUNT), dirData = new Float32Array(4 * WAVE_COUNT);
   const animation = loop((dt) => {
     if (!gl) return;
     if (state.playing) for (const w of waves) w.t += dt;
     const [width, height] = fitCanvas(canvas);
     gl.viewport(0, 0, width, height);
     const cam = camera(width / height);
-    let maxA = 0;
+    // The height the crest shading spans: random phases rarely line up, so not the sum of the
+    // amplitudes but a multiple of the RMS height, about the significant wave height.
+    let sumSquares = 0;
     waves.forEach((w, i) => {
       const a = amplitude(w), angle = state.heading + w.turn;
-      maxA += a;
+      sumSquares += a * a;
       waveData.set([a, w.k, w.t, 0], i * 4);
       dirData.set([Math.cos(angle), Math.sin(angle), w.off[0], w.off[1]], i * 4);
     });
@@ -308,7 +334,7 @@ export function mount(section, am) {
     gl.uniform3fv(L.uSun, SUN);
     gl.uniform1f(L.uExtent, EXTENT);
     gl.uniform1f(L.uDepth, state.depth);
-    gl.uniform1f(L.uMaxA, maxA);
+    gl.uniform1f(L.uMaxA, 2 * Math.sqrt(sumSquares));
     gl.uniform3fv(L.uBody, bodyColour());
     gl.uniform4fv(L.uWave, waveData);
     gl.uniform4fv(L.uDirOff, dirData);
@@ -419,7 +445,7 @@ export function mount(section, am) {
     $(section, '[data-depth-out]').textContent = h < 1 ? `${h.toFixed(2)} m` : h < 10 ? `${h.toFixed(1)} m` : `${h.toFixed(0)} m`;
     refreshOmegas();
   };
-  const syncSteep = () => { state.steep = +steep.value / 1000; $(section, '[data-steep-out]').textContent = state.steep.toFixed(3); };
+  const syncSteep = () => { state.steep = +steep.value / 500; $(section, '[data-steep-out]').textContent = state.steep.toFixed(3); };
   const syncHeading = () => { state.heading = +heading.value * Math.PI / 180; $(section, '[data-heading-out]').textContent = `${heading.value}°`; };
   depth.addEventListener('input', syncDepth);
   steep.addEventListener('input', syncSteep);
