@@ -359,6 +359,12 @@ table.truth th { color: var(--ink-soft); font-weight: 600; }
 table.truth td.t { color: var(--ok); font-weight: 700; }
 table.truth td.f { color: var(--ink-soft); }
 table.truth tr.hit td { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+table.truth tr.dc td { opacity: .5; }
+table.truth td.x { color: var(--ink-soft); }
+table.senses { border-collapse: collapse; font-size: 13px; }
+table.senses th, table.senses td { padding: 4px 10px 4px 0; text-align: left; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.senses th { color: var(--ink-soft); font-weight: 600; }
+table.senses td:nth-child(-n+2) { font-family: var(--font-mono); white-space: nowrap; }
 
 svg text { font-family: var(--font-body); }
 .diagram { width: 100%; height: auto; display: block; }

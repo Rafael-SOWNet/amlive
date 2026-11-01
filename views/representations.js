@@ -247,9 +247,11 @@ export function truthTable(truth) {
   const wrap = document.createElement('div');
   wrap.className = 'scroll-x';
   const head = truth.vars.map((v) => `<th>${escapeHtml(v)}</th>`).join('') + '<th>value</th>';
-  const rows = truth.rows.map((row) => {
-    const value = row[row.length - 1];
-    return `<tr class="${value ? 'hit' : ''}">${row.map((b) => `<td class="${b ? 't' : 'f'}">${b ? '1' : '0'}</td>`).join('')}</tr>`;
+  // A row marked impossible (the Logic tab's senses mode) shows a dash for its value.
+  const rows = truth.rows.map((row, i) => {
+    const value = row[row.length - 1], possible = truth.possible?.[i] ?? true;
+    const cells = row.map((b, j) => j === row.length - 1 && !possible ? '<td class="x">–</td>' : `<td class="${b ? 't' : 'f'}">${b ? '1' : '0'}</td>`);
+    return `<tr class="${!possible ? 'dc' : value ? 'hit' : ''}">${cells.join('')}</tr>`;
   }).join('');
   wrap.innerHTML = `<table class="truth"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
   return wrap;
