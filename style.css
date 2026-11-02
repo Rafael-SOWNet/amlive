@@ -372,6 +372,28 @@ table.senses th, table.senses td { padding: 4px 10px 4px 0; text-align: left; bo
 table.senses th { color: var(--ink-soft); font-weight: 600; }
 table.senses td:nth-child(-n+2) { font-family: var(--font-mono); white-space: nowrap; }
 .contents { display: contents; }
+svg.pla .w { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+svg.pla .d { fill: var(--ink); }
+svg.pla .g { fill: var(--surface); stroke: var(--ink); stroke-width: 1.6; }
+svg.pla .k { fill: var(--code); stroke: var(--rule); }
+svg.pla .kt, svg.pla .lit text { font: 12px var(--font-mono); fill: var(--ink); }
+svg.pla .lit { cursor: pointer; }
+svg.pla .lit rect { fill: var(--code); stroke: var(--rule); stroke-width: 1; }
+svg.pla .lit:hover rect, svg.pla .lit:focus-visible rect { stroke: var(--ink-soft); stroke-width: 1.6; }
+svg.pla .lit:focus { outline: none; }
+svg.pla .lit.on rect { stroke: var(--accent); stroke-width: 3; }
+svg.pla .lit.on text { font-weight: 700; }
+svg.pla .w.on { stroke: var(--accent); stroke-width: 2.5; }
+svg.pla .d.on { fill: var(--accent); }
+svg.pla .g.on { fill: color-mix(in srgb, var(--accent) 22%, var(--surface)); stroke: var(--accent); stroke-width: 2.2; }
+svg.pla .out { font: 13px var(--font-mono); fill: var(--ink-soft); }
+svg.pla .out.on { font-weight: 700; fill: var(--accent); }
+.pla-state { font: 13px var(--font-mono); color: var(--ink); }
+.pla-state.fail { font-family: inherit; color: var(--bad); font-weight: 600; }
+table.truth tr.current td { background: color-mix(in srgb, var(--accent) 24%, transparent); font-weight: 700; }
+.check { padding: 4px 0 6px; border-bottom: 1px solid var(--rule); }
+.check .foot.pass { color: var(--ok); }
+.check .foot.fail { color: var(--bad); font-weight: 600; }
 .output-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; align-items: start; }
 .card h3 .name { text-transform: none; letter-spacing: 0; font-family: var(--font-mono); }
 .condition { display: flex; align-items: center; gap: 14px; padding: 4px 0; border-bottom: 1px solid var(--rule); }

@@ -30,16 +30,17 @@ const SETS = [
 const SENSES = [
   { label: 'Two standards, one window', formula: 'On_heating = Occupied and Closed_window and not Open_window',
     note: 'The window reaches the controller twice: as KNX DPT 1.009, where 1 means closed, and as DPT 1.019, where 1 means open. It is one condition, so one letter, and the second test is the first one again.' },
-  { label: 'Dry-run protection', formula: 'On_pump = On_request and (NotEmpty_tank or Full_tank)',
-    note: 'A full tank is not empty. That is a fact about tanks, not about logic, so AngouriMath’s simplification keeps the Full test; the catalogue knows it, and the minimal form drops it.' },
+  { label: 'Dry-run protection', formula: 'On_pump = On_request and (NotEmpty_tank or Full_tank)', always: 'On_pump implies NotEmpty_tank',
+    note: 'A full tank is not empty. That is a fact about tanks, not about logic, so AngouriMath’s simplification keeps the Full test; the catalogue knows it, and the minimal form drops it. The always line mentions the output, so it is a design check: the pump never runs on an empty tank.' },
   { label: 'Held up', formula: 'Alarm_hover = Up and not Held and not Falling', always: '(Up and not Falling) implies Held',
     note: 'Something up that is not falling is held up by something. The alarm asks for a row that cannot happen, so with good sensors it never fires, and that same row is the fault alarm.' },
   { label: 'Lamp and horn', formula: 'On_lamp = Alarm and not Shelved and not Suppressed\nOn_horn = On_lamp and Unacknowledged and Unsilenced',
-    note: 'Two outputs. ANSI/ISA-18.2 keeps acknowledgement, shelving and suppression on channels of their own beside the alarm: the lamp shows an alarm that is neither shelved nor suppressed, and the horn, built on the lamp, sounds until it is acknowledged or silenced.' },
+    always: 'On_horn implies On_lamp',
+    note: 'Two outputs, and a design check that the horn never sounds without the lamp. ANSI/ISA-18.2 keeps acknowledgement, shelving and suppression on channels of their own beside the alarm: the lamp shows an alarm that is neither shelved nor suppressed, and the horn, built on the lamp, sounds until it is acknowledged or silenced.' },
   { label: 'Valve position',
     formula: 'On_openlamp = Near_openend and Far_closedend\nOn_closedlamp = Near_closedend and Far_openend\nAlarm_discrepancy = (Open_cmd and not On_openlamp) or (Closed_cmd and not On_closedlamp)',
-    always: 'not (Near_openend and Near_closedend)',
-    note: 'A valve reports its position with two proximity switches, one at each end of its travel: two channels, as IEC 61850 keeps them, because mid-travel both read far. The stem cannot be at both ends, so each lamp needs one switch, the discrepancy alarm (commanded one way and not there, held past the travel time) follows, and both switches near is IEC 61850’s bad state, the fault alarm.' },
+    always: 'not (Near_openend and Near_closedend); not (On_openlamp and On_closedlamp)',
+    note: 'A valve reports its position with two proximity switches, one at each end of its travel: two channels, as IEC 61850 keeps them, because mid-travel both read far. The stem cannot be at both ends, so each lamp needs one switch, the discrepancy alarm (commanded one way and not there, held past the travel time) follows, and both switches near is IEC 61850’s bad state, the fault alarm. The second line is a design check: the two lamps never light together.' },
   { label: 'Two-channel safety door', formula: 'On_press = On_request and Closed_a and not Open_b and NoFault_press',
     always: 'Closed_a xor Open_b',
     note: 'Channel a is a normally-open contact (1 = closed) and channel b a normally-closed one (1 = open), so healthy contacts always differ. With that invariant one channel is enough, which is safe only because the fault alarm watches it: a safety relay runs on both channels and trips on a discrepancy.' },
@@ -49,11 +50,12 @@ const SENSES = [
     note: 'A window cannot open while its handle is turned to closed, so a closed handle already means a closed window, and a contact reading open behind a closed handle means one of the two is wrong. Heating / Cooling is one bit for two alternatives (KNX DPT 1.100).' },
   { label: 'Stack light',
     formula: 'On_green = Running_filler and not (Blocked_filler or Starved_filler) and InSpecification_scale and NoFault_filler and Remote_filler\nOn_amber = Blocked_filler or Starved_filler\nOn_red = Fault_filler or OutOfSpecification_scale',
-    always: '(Blocked_filler or Starved_filler or Fault_filler) implies Stopped_filler',
-    note: 'A filler’s stack light from six signals, too many for a Karnaugh map. PackML suspends a machine that is blocked or starved, and a fault stops it, so a running filler is none of those and green needs three tests, not six. Running while reporting any of them means a status bit is wrong.' },
+    always: '(Blocked_filler or Starved_filler or Fault_filler) implies Stopped_filler; not (On_green and On_red); not (On_green and On_amber); On_green or On_amber or On_red',
+    note: 'A filler’s stack light from six signals, too many for a Karnaugh map. PackML suspends a machine that is blocked or starved, and a fault stops it, so a running filler is none of those and green needs three tests, not six. The last three lines are design checks: green never lights with red or amber, but the last one fails, and the checks card says when the light is dark.' },
   { label: 'Kettle',
     formula: 'above_boilingpoint = T > 100\ntoo_hot = T > 120\nOn_heater = On_kettle and not above_boilingpoint\nAlarm_dry = On_kettle and too_hot and above_boilingpoint',
-    note: 'Conditions on a real number. AngouriMath solves where each comparison turns, at 100 and 120, and finds that T > 120 implies T > 100, so the dry-boil alarm needs only one of them. If the two are separate thermostats, the 120 °C one on without the 100 °C one means one of them is broken.' },
+    always: 'not (On_heater and Alarm_dry)',
+    note: 'Conditions on a real number. AngouriMath solves where each comparison turns, at 100 and 120, and finds that T > 120 implies T > 100, so the dry-boil alarm needs only one of them, and the design check that the heater is never on during a dry-boil alarm holds because of it. If the two are separate thermostats, the 120 °C one on without the 100 °C one means one of them is broken.' },
   { label: 'Frost protection', formula: 'On_heater = (Occupied_room and T < 19) or (Unoccupied_room and T < 5) or T < 2',
     note: 'Comfort heating when the room is occupied, frost protection when it is not, and a last resort below 2 °C, with the comparisons written in the formula. Each implies the next, so the minimal form needs neither the last resort nor the Unoccupied test.' },
 ];
@@ -70,7 +72,7 @@ const MARKUP = `
     <p class="lede">A formula in true-or-false variables, or a formula in sets: AngouriMath builds the truth table and simplifies it, a Karnaugh map finds the minimal sum of products, and AngouriMath checks every rewrite is equivalent by comparing truth tables.</p>
     <div class="presets" role="group" aria-label="Mode" data-modes></div>
     <div class="formula"><span aria-hidden="true" data-prefix>ƒ</span><div class="gutter" aria-hidden="true" data-gutter hidden></div><textarea id="logic-input" rows="1" aria-label="Formula" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><div class="measure" aria-hidden="true" data-measure></div></div>
-    <div class="formula" data-always-row hidden><span aria-hidden="true">always</span><input id="logic-always" aria-label="Invariants: facts that always hold, separated by semicolons" placeholder="facts that always hold, separated by semicolons" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+    <div class="formula" data-always-row hidden><span aria-hidden="true">always</span><input id="logic-always" aria-label="Invariants: facts that always hold, and checks on the outputs, separated by semicolons" placeholder="facts that always hold, and checks on the outputs, separated by semicolons" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
     <details class="catalogue" data-catalogue hidden>
       <summary>The catalogue: every sense you can write</summary>
       <p class="foot">Each pair is one bit read two ways: the first sense means 1, the second 0. Add a channel after an underscore, as in Open_door; case does not matter. Click a sense to put it in the field you were typing in. From the LogicState catalogue (Rafael-SOWNet/UnitsNet, spike/logic-state).</p>
@@ -92,10 +94,11 @@ const MARKUP = `
     <article class="card" data-plain><h3>Minimal sum of products</h3><div class="tex" data-sop></div><p class="foot" data-sop-check></p></article>
     <div class="contents" data-outputs hidden></div>
     <article class="card" data-rules-card hidden><h3>Invariants and the fault alarm</h3><div data-rules></div></article>
+    <article class="card wide" data-checks-card hidden><h3>Design checks</h3><div data-checks></div></article>
     <article class="card" data-plain data-kmap-card><h3>Karnaugh map</h3><div class="scroll-x" data-kmap></div><p class="foot" data-kmap-note></p></article>
     <article class="card"><h3>Truth table</h3><div data-truth></div></article>
     <article class="card wide" data-plain><h3>Circuit for the simplified form</h3><div class="scroll-x" data-circuit></div></article>
-    <article class="card wide" data-pla-card hidden><h3>Circuit: every output, sharing product terms</h3><div class="scroll-x" data-pla></div><p class="foot">Two levels, as a PLA draws them: each input on the left in the sense it is needed, an AND gate per product term, shared by every output that uses it, and an OR gate per output. A dot joins wires; wires that cross without one do not touch.</p></article>
+    <article class="card wide" data-pla-card hidden><h3>Circuit: every output, sharing product terms</h3><div class="scroll-x" data-pla></div><p class="foot pla-state" data-pla-state></p><p class="foot">Click an input on the left to switch it; a wire or gate carrying 1 lights up, and an output that is 1 is bold. Two levels, as a PLA draws them: each input on the left in the sense it is needed, an AND gate per product term, shared by every output that uses it, and an OR gate per output. A dot joins wires; wires that cross without one do not touch.</p></article>
   </div>
 </div>`;
 
@@ -202,6 +205,7 @@ export function mount(section, am) {
     for (const card of section.querySelectorAll('[data-plain]')) card.hidden = senses;
     for (const card of ['[data-senses-card]', '[data-outputs]', '[data-rules-card]', '[data-pla-card]']) $(section, card).hidden = !senses;
     $(section, '[data-conditions-card]').hidden = !senses || !r.conditions?.length;
+    $(section, '[data-checks-card]').hidden = !senses || !r.checks?.length;
     if (senses) {
       $(section, '[data-puzzle]').hidden = $(section, '[data-venn-card]').hidden = true;
       showSenses(r);
@@ -238,21 +242,42 @@ export function mount(section, am) {
     }
   }
 
+  // The circuit's input values, by label, so that they survive an edit of the formula.
+  const switched = new Map();
   function showSenses(r) {
     const n = r.inputs.length, rows = r.truth.rows, possible = r.truth.possible, can = possible.filter(Boolean).length;
     const every = can === rows.length, where = every ? '' : ' that can occur';
+    let summary;
     if (r.outputs.length === 1) {
       const count = rows.filter((row, i) => possible[i] && row[n]).length;
-      setChip(chip, 'ok', count === can ? (every ? 'Always true' : 'True in every row that can occur')
-        : count === 0 ? (every ? 'Never true' : 'Never true in a row that can occur') : `True in ${count} of ${can} rows${where}`);
+      summary = count === can ? (every ? 'Always true' : 'True in every row that can occur')
+        : count === 0 ? (every ? 'Never true' : 'Never true in a row that can occur') : `True in ${count} of ${can} rows${where}`;
     } else
-      setChip(chip, 'ok', `${r.outputs.length} outputs of ${n} inputs, ${every ? `all ${rows.length} rows can occur` : `${can} of ${rows.length} rows can occur`}`);
+      summary = `${r.outputs.length} outputs of ${n} inputs, ${every ? `all ${rows.length} rows can occur` : `${can} of ${rows.length} rows can occur`}`;
+    const failing = r.checks.filter((c) => !c.holds).length;
+    if (r.checks.length)
+      summary += failing ? `; ${failing} of ${r.checks.length} design checks fail` : `; ${r.checks.length === 1 ? 'the design check holds' : `all ${r.checks.length} design checks hold`}`;
+    setChip(chip, failing ? 'warn' : 'ok', summary);
     $(section, '[data-senses]').innerHTML = sensesTable(r.senses);
     conditions($(section, '[data-conditions]'), r);
     $(section, '[data-outputs]').replaceChildren(...r.outputs.map((o, k) => outputCard(o, k, r)));
     rules($(section, '[data-rules]'), r);
+    designChecks($(section, '[data-checks]'), r);
     $(section, '[data-truth]').replaceChildren(truthTable(r.truth));
-    pla($(section, '[data-pla]'), r.inputs, r.outputs);
+    const paint = pla($(section, '[data-pla]'), r.inputs, r.outputs, (i) => {
+      switched.set(r.inputs[i].label, !(switched.get(r.inputs[i].label) ?? false));
+      simulate();
+    });
+    function simulate() {
+      const values = r.inputs.map((input) => switched.get(input.label) ?? false), results = paint(values);
+      const index = values.reduce((sum, v) => sum * 2 + (v ? 1 : 0), 0), state = $(section, '[data-pla-state]');
+      state.classList.toggle('fail', !possible[index]);
+      state.textContent = possible[index]
+        ? r.outputs.map((o, k) => `${o.name || 'ƒ'} = ${results[k] ? 1 : 0}`).join(', ')
+        : 'These inputs cannot occur: the invariants rule them out, so the fault alarm is on, and the outputs are whatever the minimal forms make of a don’t-care.';
+      section.querySelectorAll('[data-truth] tbody tr').forEach((tr, i) => tr.classList.toggle('current', i === index));
+    }
+    simulate();
   }
 
   setMode('logic');
@@ -281,6 +306,28 @@ function conditions(box, r) {
   const foot = document.createElement('p');
   foot.className = 'foot';
   foot.textContent = ['Each comparison is one input, true where it holds; its negation is written turned round, as T ≤ 100 for not (T > 100). How comparisons on one number constrain each other is worked out by AngouriMath and listed with the invariants.', ...r.notes].join(' ');
+  box.append(foot);
+}
+
+function designChecks(box, r) {
+  box.replaceChildren();
+  for (const c of r.checks) {
+    const item = document.createElement('div');
+    item.className = 'check';
+    const when = c.holds ? [] : c.whenTerms;
+    item.innerHTML = `<div class="tex"></div><p class="foot ${c.holds ? 'pass' : 'fail'}"></p>`
+      + when.map(() => '<div class="tex"></div>').join('') + (c.holds ? '' : '<p class="foot"></p>');
+    tex(item.children[0], c.latex);
+    item.children[1].textContent = c.holds
+      ? '✓ Holds in every row that can occur: AngouriMath’s truth table of (invariants and not check), with each output replaced by its formula, has no true row.'
+      : `✗ Fails in ${c.broken} of the ${c.occur} rows that can occur, exactly when ${when.length > 1 ? 'any of these holds' : 'this holds'}:`;
+    when.forEach((latex, i) => tex(item.children[2 + i], latex));
+    if (!c.holds) item.lastElementChild.textContent = `For example: ${c.example}.`;
+    box.append(item);
+  }
+  const foot = document.createElement('p');
+  foot.className = 'foot';
+  foot.textContent = 'A line of the always field that mentions an output is a check on the design rather than a fact about the plant: it does not decide which rows can occur, it has to hold in all of them.';
   box.append(foot);
 }
 
@@ -452,7 +499,7 @@ function circuit(box, tree) {
 // Two levels, as a PLA draws them: each literal once on the left with a vertical rail, an AND gate
 // per product term shared by every output that uses it, a rail per term, and an OR gate per output
 // with its name on the right. A term of one literal needs no AND, and an output of one term no OR.
-function pla(box, inputs, outputs) {
+function pla(box, inputs, outputs, onToggle) {
   const n = inputs.length;
   const terms = [], byKey = new Map();
   outputs.forEach((o, k) => o.groups.forEach((g) => {
@@ -482,64 +529,86 @@ function pla(box, inputs, outputs) {
   const centre = (ys, h) => ys.map((y) => y + (H - h) / 2);
   const ly = centre(litYs, used.length * PITCH), ty = centre(termYs, terms.reduce((s, t) => s + gap(t.lits.length), 0)), oy = centre(outYs, ofOutput.reduce((s, ts) => s + gap(ts.length), 0));
 
-  // Columns, left to right.
+  // Columns, left to right. Every wire, gate and box carries the signal it shows (l: a literal,
+  // t: a product term, o: an output), so that painting it is a matter of classes.
   const LW = Math.max(40, ...used.map((l) => label(l).length * 7 + 14)), rail1 = (j) => 8 + LW + 18 + j * 14;
   const XA = rail1(Math.max(used.length - 1, 0)) + 50, TIP = XA + 22, rail2 = (t) => TIP + 18 + t * 14;
   const XO = rail2(Math.max(terms.length - 1, 0)) + 50, OUT = XO + 20;
-  const W = OUT + 30 + Math.max(...outputs.map((o) => (o.name || 'ƒ').length * 7.5)) + 12;
-  const wire = 'stroke:var(--ink);stroke-width:1.5;fill:none', body = 'stroke:var(--ink);stroke-width:1.6;fill:var(--surface)';
+  const W = OUT + 30 + Math.max(...outputs.map((o) => (o.name || 'ƒ').length * 8)) + 12;
   let wires = '', parts = '';
-  const dot = (x, y) => `<circle cx="${x}" cy="${y}" r="3" style="fill:var(--ink)"/>`;
+  const path = (sig, d) => `<path class="w" data-sig="${sig}" d="${d}"/>`;
+  const dot = (sig, x, y) => `<circle class="d" data-sig="${sig}" cx="${x}" cy="${y}" r="3"/>`;
+  const constant = (x, y, text) => `<rect class="k" x="${x - 14}" y="${y - 12}" width="28" height="24" rx="6"/><text class="kt" x="${x}" y="${y + 4}" text-anchor="middle">${text}</text>`;
   // A rail joins an entry to its taps; a dot marks each point that is not an end of the rail.
-  const rail = (x, entry, taps) => {
+  const rail = (sig, x, entry, taps) => {
     const ys = [entry, ...taps], lo = Math.min(...ys), hi = Math.max(...ys);
-    wires += `<path d="M${x} ${lo} V${hi}" style="${wire}"/>`;
-    for (const y of new Set(ys)) if (y > lo && y < hi) wires += dot(x, y);
+    wires += path(sig, `M${x} ${lo} V${hi}`);
+    for (const y of new Set(ys)) if (y > lo && y < hi) wires += dot(sig, x, y);
   };
   const pins = (count, y) => Array.from({ length: count }, (_, i) => y + (i - (count - 1) / 2) * PIN);
 
   used.forEach((lit, j) => {
-    const taps = [];
+    const sig = `l:${lit}`, taps = [];
     terms.forEach((t, ti) => {
       const at = t.lits.indexOf(lit);
       if (at < 0) return;
       const y = t.lits.length === 1 ? ty[ti] : pins(t.lits.length, ty[ti])[at];
       taps.push(y);
-      wires += `<path d="M${rail1(j)} ${y} H${t.lits.length === 1 ? TIP : XA - 20}" style="${wire}"/>`;
+      wires += path(sig, `M${rail1(j)} ${y} H${t.lits.length === 1 ? TIP : XA - 20}`);
     });
-    wires += `<path d="M${8 + LW} ${ly[j]} H${rail1(j)}" style="${wire}"/>`;
-    rail(rail1(j), ly[j], taps);
-    parts += `<rect x="8" y="${ly[j] - 12}" width="${LW}" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/>`
-      + `<text x="${8 + LW / 2}" y="${ly[j] + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">${escapeHtml(label(lit))}</text>`;
+    wires += path(sig, `M${8 + LW} ${ly[j]} H${rail1(j)}`);
+    rail(sig, rail1(j), ly[j], taps);
+    parts += `<g class="lit" data-lit="${lit}" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(label(lit))}">`
+      + `<rect x="8" y="${ly[j] - 12}" width="${LW}" height="24" rx="6"/><text x="${8 + LW / 2}" y="${ly[j] + 4}" text-anchor="middle">${escapeHtml(label(lit))}</text></g>`;
   });
   terms.forEach((t, ti) => {
-    const y = ty[ti], hh = gap(t.lits.length) / 2 - 6;
-    if (t.lits.length === 0)
-      parts += `<rect x="${XA - 14}" y="${y - 12}" width="28" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/><text x="${XA}" y="${y + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">1</text>`;
-    else if (t.lits.length > 1)
-      parts += `<path d="M${XA - 20} ${y - hh} H${XA} Q${TIP} ${y - hh} ${TIP} ${y} Q${TIP} ${y + hh} ${XA} ${y + hh} H${XA - 20} Z" style="${body}"/>`;
+    const y = ty[ti], hh = gap(t.lits.length) / 2 - 6, sig = `t:${ti}`;
+    if (t.lits.length === 0) parts += constant(XA, y, '1');
+    else if (t.lits.length > 1) parts += `<path class="g" data-sig="${sig}" d="M${XA - 20} ${y - hh} H${XA} Q${TIP} ${y - hh} ${TIP} ${y} Q${TIP} ${y + hh} ${XA} ${y + hh} H${XA - 20} Z"/>`;
     const taps = [];
     outputs.forEach((_, k) => {
       const at = ofOutput[k].indexOf(t);
       if (at < 0) return;
       const single = ofOutput[k].length === 1, py = single ? oy[k] : pins(ofOutput[k].length, oy[k])[at];
       taps.push(py);
-      wires += `<path d="M${rail2(ti)} ${py} H${single ? OUT : XO - 16}" style="${wire}"/>`;
+      wires += path(sig, `M${rail2(ti)} ${py} H${single ? OUT : XO - 16}`);
     });
-    wires += `<path d="M${t.lits.length === 0 ? XA + 14 : TIP} ${y} H${rail2(ti)}" style="${wire}"/>`;
-    rail(rail2(ti), y, taps);
+    wires += path(sig, `M${t.lits.length === 0 ? XA + 14 : TIP} ${y} H${rail2(ti)}`);
+    rail(sig, rail2(ti), y, taps);
   });
   outputs.forEach((o, k) => {
-    const y = oy[k], m = ofOutput[k].length, hh = gap(m) / 2 - 6;
-    if (m === 0)
-      parts += `<rect x="${XO - 14}" y="${y - 12}" width="28" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/><text x="${XO}" y="${y + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">0</text>`
-        + `<path d="M${XO + 14} ${y} H${OUT}" style="${wire}"/>`;
-    else if (m > 1)
-      parts += `<path d="M${XO - 20} ${y - hh} Q${XO + 6} ${y - hh} ${OUT} ${y} Q${XO + 6} ${y + hh} ${XO - 20} ${y + hh} Q${XO - 10} ${y} ${XO - 20} ${y - hh} Z" style="${body}"/>`;
-    parts += `<path d="M${OUT} ${y} H${OUT + 16}" style="${wire}"/>${dot(OUT + 16, y)}`
-      + `<text x="${OUT + 26}" y="${y + 4}" font-size="13" style="fill:var(--ink);font-family:var(--font-mono)">${escapeHtml(o.name || 'ƒ')}</text>`;
+    const y = oy[k], m = ofOutput[k].length, hh = gap(m) / 2 - 6, sig = `o:${k}`;
+    if (m === 0) parts += constant(XO, y, '0') + path(sig, `M${XO + 14} ${y} H${OUT}`);
+    else if (m > 1) parts += `<path class="g" data-sig="${sig}" d="M${XO - 20} ${y - hh} Q${XO + 6} ${y - hh} ${OUT} ${y} Q${XO + 6} ${y + hh} ${XO - 20} ${y + hh} Q${XO - 10} ${y} ${XO - 20} ${y - hh} Z"/>`;
+    parts += path(sig, `M${OUT} ${y} H${OUT + 16}`) + dot(sig, OUT + 16, y)
+      + `<text class="out" data-sig="${sig}" x="${OUT + 26}" y="${y + 4}">${escapeHtml(o.name || 'ƒ')}</text>`;
   });
-  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Two-level circuit of every output, inputs on the left and outputs on the right">${wires}${parts}</svg>`;
+  box.innerHTML = `<svg class="pla" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Two-level circuit of every output: inputs on the left switch on a click, outputs on the right">${wires}${parts}</svg>`;
+
+  // A click or Enter on an input box switches that input.
+  const svg = box.firstElementChild;
+  const toggle = (e) => {
+    const lit = e.target.closest('[data-lit]')?.dataset.lit;
+    if (!lit || (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    onToggle(Number(lit.split(':')[0]));
+  };
+  svg.addEventListener('click', toggle);
+  svg.addEventListener('keydown', toggle);
+
+  // Paints the circuit for the inputs' values: a literal that holds gets a bold outline, a wire or
+  // gate carrying 1 is lit, and an output that is 1 is bold. Returns the outputs' values.
+  return (values) => {
+    const on = new Set(used.filter((lit) => { const [i, v] = lit.split(':').map(Number); return values[i] === (v === 1); }).map((lit) => `l:${lit}`));
+    terms.forEach((t, ti) => { if (t.lits.every((lit) => on.has(`l:${lit}`))) on.add(`t:${ti}`); });
+    outputs.forEach((_, k) => { if (ofOutput[k].some((t) => on.has(`t:${terms.indexOf(t)}`))) on.add(`o:${k}`); });
+    for (const el of svg.querySelectorAll('[data-sig]')) el.classList.toggle('on', on.has(el.dataset.sig));
+    for (const el of svg.querySelectorAll('[data-lit]')) {
+      el.classList.toggle('on', on.has(`l:${el.dataset.lit}`));
+      el.setAttribute('aria-pressed', String(on.has(`l:${el.dataset.lit}`)));
+    }
+    return outputs.map((_, k) => on.has(`o:${k}`));
+  };
 }
 
 // ---------------------------------------------------------------- Venn diagram
