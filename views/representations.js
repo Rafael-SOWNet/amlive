@@ -246,12 +246,14 @@ void main() {
 export function truthTable(truth) {
   const wrap = document.createElement('div');
   wrap.className = 'scroll-x';
-  const head = truth.vars.map((v) => `<th>${escapeHtml(v)}</th>`).join('') + '<th>value</th>';
-  // A row marked impossible (the Logic tab's senses mode) shows a dash for its value.
+  // The Logic tab's senses mode adds a column per output and marks impossible rows, whose values
+  // show as dashes.
+  const n = truth.vars.length, outputs = truth.outputs ?? ['value'];
+  const head = [...truth.vars, ...outputs].map((v) => `<th>${escapeHtml(v)}</th>`).join('');
   const rows = truth.rows.map((row, i) => {
-    const value = row[row.length - 1], possible = truth.possible?.[i] ?? true;
-    const cells = row.map((b, j) => j === row.length - 1 && !possible ? '<td class="x">–</td>' : `<td class="${b ? 't' : 'f'}">${b ? '1' : '0'}</td>`);
-    return `<tr class="${!possible ? 'dc' : value ? 'hit' : ''}">${cells.join('')}</tr>`;
+    const possible = truth.possible?.[i] ?? true, hit = row.slice(n).some(Boolean);
+    const cells = row.map((b, j) => j >= n && !possible ? '<td class="x">–</td>' : `<td class="${b ? 't' : 'f'}">${b ? '1' : '0'}</td>`);
+    return `<tr class="${!possible ? 'dc' : hit ? 'hit' : ''}">${cells.join('')}</tr>`;
   }).join('');
   wrap.innerHTML = `<table class="truth"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
   return wrap;

@@ -25,17 +25,37 @@ const SETS = [
   { label: 'De Morgan', formula: 'A \\ (B \\/ C)', note: 'Read as logic: a and not (b or c), which is a and not b and not c.' },
 ];
 
+// Each line is an output, Name = formula, in a sense like the inputs, or a condition, Name = a
+// comparison of real numbers. An output may use the ones above it.
 const SENSES = [
-  { label: 'Two standards, one window', formula: 'Closed_window or (Open_window and Unoccupied)',
-    note: 'One sensor speaks KNX DPT 1.009, where 1 means closed, another DPT 1.019, where 1 means open. They describe one window, so they are one letter, and the answer comes back in senses instead of with a not.' },
-  { label: 'Dry-run protection', formula: 'Running_pump and (NotEmpty_tank or Full_tank)',
+  { label: 'Two standards, one window', formula: 'On_heating = Occupied and Closed_window and not Open_window',
+    note: 'The window reaches the controller twice: as KNX DPT 1.009, where 1 means closed, and as DPT 1.019, where 1 means open. It is one condition, so one letter, and the second test is the first one again.' },
+  { label: 'Dry-run protection', formula: 'On_pump = On_request and (NotEmpty_tank or Full_tank)',
     note: 'A full tank is not empty. That is a fact about tanks, not about logic, so AngouriMath’s simplification keeps the Full test; the catalogue knows it, and the minimal form drops it.' },
-  { label: 'Interlock', formula: 'Enabled_motor and Running_motor and not Fault_motor', always: 'Running_motor implies Enabled_motor',
-    note: 'A motor runs only when it is enabled, so testing Enabled as well is redundant, and seeing it run while disabled means a signal is wrong.' },
-  { label: 'Held up', formula: 'Up and not Held and not Falling', always: '(Up and not Falling) implies Held',
-    note: 'Something up that is not falling is held up by something. The formula asks for a row that cannot happen, so with good sensors it never fires, and that same row is the fault alarm.' },
-  { label: 'Annunciate', formula: 'Alarm and Unacknowledged and not Shelved and not Suppressed',
-    note: 'ANSI/ISA-18.2 keeps acknowledgement, shelving and suppression on channels of their own beside the alarm. Each not comes back as the opposite sense.' },
+  { label: 'Held up', formula: 'Alarm_hover = Up and not Held and not Falling', always: '(Up and not Falling) implies Held',
+    note: 'Something up that is not falling is held up by something. The alarm asks for a row that cannot happen, so with good sensors it never fires, and that same row is the fault alarm.' },
+  { label: 'Lamp and horn', formula: 'On_lamp = Alarm and not Shelved and not Suppressed\nOn_horn = On_lamp and Unacknowledged and Unsilenced',
+    note: 'Two outputs. ANSI/ISA-18.2 keeps acknowledgement, shelving and suppression on channels of their own beside the alarm: the lamp shows an alarm that is neither shelved nor suppressed, and the horn, built on the lamp, sounds until it is acknowledged or silenced.' },
+  { label: 'Valve position',
+    formula: 'On_openlamp = Near_openend and Far_closedend\nOn_closedlamp = Near_closedend and Far_openend\nAlarm_discrepancy = (Open_cmd and not On_openlamp) or (Closed_cmd and not On_closedlamp)',
+    always: 'not (Near_openend and Near_closedend)',
+    note: 'A valve reports its position with two proximity switches, one at each end of its travel: two channels, as IEC 61850 keeps them, because mid-travel both read far. The stem cannot be at both ends, so each lamp needs one switch, the discrepancy alarm (commanded one way and not there, held past the travel time) follows, and both switches near is IEC 61850’s bad state, the fault alarm.' },
+  { label: 'Two-channel safety door', formula: 'On_press = On_request and Closed_a and not Open_b and NoFault_press',
+    always: 'Closed_a xor Open_b',
+    note: 'Channel a is a normally-open contact (1 = closed) and channel b a normally-closed one (1 = open), so healthy contacts always differ. With that invariant one channel is enough, which is safe only because the fault alarm watches it: a safety relay runs on both channels and trips on a discrepancy.' },
+  { label: 'Window and handle',
+    formula: 'Open_heatingvalve = Heating_mode and Occupied_room and Closed_window and Closed_handle\nOpen_coolingvalve = Cooling_mode and Occupied_room and Closed_window and Closed_handle',
+    always: 'Open_window implies Open_handle',
+    note: 'A window cannot open while its handle is turned to closed, so a closed handle already means a closed window, and a contact reading open behind a closed handle means one of the two is wrong. Heating / Cooling is one bit for two alternatives (KNX DPT 1.100).' },
+  { label: 'Stack light',
+    formula: 'On_green = Running_filler and not (Blocked_filler or Starved_filler) and InSpecification_scale and NoFault_filler and Remote_filler\nOn_amber = Blocked_filler or Starved_filler\nOn_red = Fault_filler or OutOfSpecification_scale',
+    always: '(Blocked_filler or Starved_filler or Fault_filler) implies Stopped_filler',
+    note: 'A filler’s stack light from six signals, too many for a Karnaugh map. PackML suspends a machine that is blocked or starved, and a fault stops it, so a running filler is none of those and green needs three tests, not six. Running while reporting any of them means a status bit is wrong.' },
+  { label: 'Kettle',
+    formula: 'above_boilingpoint = T > 100\ntoo_hot = T > 120\nOn_heater = On_kettle and not above_boilingpoint\nAlarm_dry = On_kettle and too_hot and above_boilingpoint',
+    note: 'Conditions on a real number. AngouriMath solves where each comparison turns, at 100 and 120, and finds that T > 120 implies T > 100, so the dry-boil alarm needs only one of them. If the two are separate thermostats, the 120 °C one on without the 100 °C one means one of them is broken.' },
+  { label: 'Frost protection', formula: 'On_heater = (Occupied_room and T < 19) or (Unoccupied_room and T < 5) or T < 2',
+    note: 'Comfort heating when the room is occupied, frost protection when it is not, and a last resort below 2 °C, with the comparisons written in the formula. Each implies the next, so the minimal form needs neither the last resort nor the Unoccupied test.' },
 ];
 
 const MODES = { logic: 'Logic', sets: 'Sets', senses: 'Senses' };
@@ -49,8 +69,14 @@ const MARKUP = `
     </div>
     <p class="lede">A formula in true-or-false variables, or a formula in sets: AngouriMath builds the truth table and simplifies it, a Karnaugh map finds the minimal sum of products, and AngouriMath checks every rewrite is equivalent by comparing truth tables.</p>
     <div class="presets" role="group" aria-label="Mode" data-modes></div>
-    <div class="formula"><span aria-hidden="true" data-prefix>ƒ</span><input id="logic-input" aria-label="Formula" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+    <div class="formula"><span aria-hidden="true" data-prefix>ƒ</span><div class="gutter" aria-hidden="true" data-gutter hidden></div><textarea id="logic-input" rows="1" aria-label="Formula" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><div class="measure" aria-hidden="true" data-measure></div></div>
     <div class="formula" data-always-row hidden><span aria-hidden="true">always</span><input id="logic-always" aria-label="Invariants: facts that always hold, separated by semicolons" placeholder="facts that always hold, separated by semicolons" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+    <details class="catalogue" data-catalogue hidden>
+      <summary>The catalogue: every sense you can write</summary>
+      <p class="foot">Each pair is one bit read two ways: the first sense means 1, the second 0. Add a channel after an underscore, as in Open_door; case does not matter. Click a sense to put it in the field you were typing in. From the LogicState catalogue (Rafael-SOWNet/UnitsNet, spike/logic-state).</p>
+      <div class="catalogue-grid" data-catalogue-grid></div>
+      <p class="foot" data-catalogue-rules></p>
+    </details>
     <div class="presets" role="group" aria-label="Examples" data-presets></div>
     <p class="note" data-note></p>
     <div class="status"><span class="chip" data-chip>Waiting for AngouriMath</span><span class="timing" data-timing></span></div>
@@ -60,13 +86,16 @@ const MARKUP = `
     <article class="card" data-puzzle hidden><h3>Answer</h3><div data-answer></div></article>
     <article class="card" data-venn-card hidden><h3>Venn diagram</h3><canvas data-venn style="height:300px"></canvas><p class="foot" data-sets></p></article>
     <article class="card wide" data-senses-card hidden><h3>Senses</h3><div class="scroll-x" data-senses></div><p class="foot">One letter per channel, named after its true sense; the opposite sense is its negation. Pairs and sources from the LogicState catalogue.</p></article>
-    <article class="card"><h3>The formula</h3><div class="tex" data-latex></div><div data-letters hidden><p class="foot">In letters:</p><div class="tex" data-letters-tex></div></div></article>
-    <article class="card"><h3>Simplified by AngouriMath</h3><div class="tex" data-simplified></div><p class="foot" data-simplified-check></p></article>
-    <article class="card"><h3 data-sop-title>Minimal sum of products</h3><div class="tex" data-sop></div><p class="foot" data-sop-check></p></article>
+    <article class="card wide" data-conditions-card hidden><h3>Conditions on real numbers</h3><div data-conditions></div></article>
+    <article class="card" data-plain><h3>The formula</h3><div class="tex" data-latex></div></article>
+    <article class="card" data-plain><h3>Simplified by AngouriMath</h3><div class="tex" data-simplified></div><p class="foot" data-simplified-check></p></article>
+    <article class="card" data-plain><h3>Minimal sum of products</h3><div class="tex" data-sop></div><p class="foot" data-sop-check></p></article>
+    <div class="contents" data-outputs hidden></div>
     <article class="card" data-rules-card hidden><h3>Invariants and the fault alarm</h3><div data-rules></div></article>
-    <article class="card" data-kmap-card><h3>Karnaugh map</h3><div class="scroll-x" data-kmap></div><p class="foot" data-kmap-note></p></article>
+    <article class="card" data-plain data-kmap-card><h3>Karnaugh map</h3><div class="scroll-x" data-kmap></div><p class="foot" data-kmap-note></p></article>
     <article class="card"><h3>Truth table</h3><div data-truth></div></article>
-    <article class="card wide"><h3 data-circuit-title>Circuit for the simplified form</h3><div class="scroll-x" data-circuit></div></article>
+    <article class="card wide" data-plain><h3>Circuit for the simplified form</h3><div class="scroll-x" data-circuit></div></article>
+    <article class="card wide" data-pla-card hidden><h3>Circuit: every output, sharing product terms</h3><div class="scroll-x" data-pla></div><p class="foot">Two levels, as a PLA draws them: each input on the left in the sense it is needed, an AND gate per product term, shared by every output that uses it, and an OR gate per output. A dot joins wires; wires that cross without one do not touch.</p></article>
   </div>
 </div>`;
 
@@ -83,22 +112,75 @@ export function mount(section, am) {
     mode = m;
     pressMode(MODES[m]);
     $(section, '[data-prefix]').textContent = m === 'sets' ? 'S =' : 'ƒ';
+    $(section, '[data-prefix]').hidden = m === 'senses';
+    gutter.hidden = m !== 'senses';
     $(section, '[data-always-row]').hidden = m !== 'senses';
+    $(section, '[data-catalogue]').hidden = m !== 'senses';
+    if (m === 'senses') showCatalogue();
     const list = m === 'sets' ? SETS : m === 'senses' ? SENSES : LOGIC;
     press = presets($(section, '[data-presets]'), list, pick);
     pick(list[0]);
   }
+  // The formula field is a textarea so that senses mode can take one output per line; it grows
+  // with its text, and elsewhere Enter adds no line. In senses mode a gutter numbers each line and
+  // marks with ↪ each row that only continues a long one, measured on a hidden copy of the text
+  // laid out at the same width, so a new line and a wrapped one look different.
+  const gutter = $(section, '[data-gutter]'), measure = $(section, '[data-measure]');
+  function fit() {
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+    if (gutter.hidden) return;
+    measure.style.width = `${input.clientWidth}px`;
+    measure.replaceChildren(...input.value.split('\n').map((line) => {
+      const row = document.createElement('div');
+      row.textContent = line || ' ';
+      return row;
+    }));
+    const step = parseFloat(getComputedStyle(input).lineHeight);
+    gutter.innerHTML = [...measure.children].map((row, i) =>
+      `<div>${i + 1}</div>${'<div class="wrap">↪</div>'.repeat(Math.max(0, Math.round(row.offsetHeight / step) - 1))}`).join('');
+  }
+  let width = 0;
+  new ResizeObserver(() => { if (input.clientWidth !== width) { width = input.clientWidth; fit(); } }).observe(input.parentElement);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && mode !== 'senses') e.preventDefault(); });
   function pick(p) {
     current = p;
     input.value = p.formula;
+    fit();
     always.value = p.always || '';
     note.textContent = p.note || '';
     press(p.label);
     analyze();
   }
   const later = debounce(() => { current = null; analyze(); }, 450);
-  for (const field of [input, always])
-    field.addEventListener('input', () => { press(null); note.textContent = ''; later(); });
+  let typingIn = input;
+  for (const field of [input, always]) {
+    field.addEventListener('input', () => { fit(); press(null); note.textContent = ''; later(); });
+    field.addEventListener('focus', () => { typingIn = field; });
+  }
+
+  // The catalogue comes from the C# side, which reads the formula by it, so the two cannot differ.
+  let catalogue = null;
+  async function showCatalogue() {
+    catalogue ??= am.json('LogicJs', 'SenseCatalogue', []).then((c) => {
+      const sense = (name) => `<button type="button" data-sense="${escapeHtml(name)}">${escapeHtml(name)}</button>`;
+      $(section, '[data-catalogue-grid]').innerHTML = c.pairs.map((p) =>
+        `<div>${sense(p.true)} / ${sense(p.false)}${p.source ? `<span>${escapeHtml(p.source)}</span>` : ''}</div>`).join('');
+      $(section, '[data-catalogue-rules]').textContent = c.exclusive.map((x) =>
+        `Built in: ${x.a} implies ${x.notB} on any channel that has both. ${x.why}`).join(' ');
+    });
+    try { await catalogue; } catch { catalogue = null; }
+  }
+  $(section, '[data-catalogue-grid]').addEventListener('click', (e) => {
+    const name = e.target.closest('[data-sense]')?.dataset.sense;
+    if (!name) return;
+    const at = typingIn.selectionStart ?? typingIn.value.length, end = typingIn.selectionEnd ?? at;
+    const before = typingIn.value.slice(0, at), gap = before && !/\s$/.test(before) ? ' ' : '';
+    typingIn.value = before + gap + name + typingIn.value.slice(end);
+    typingIn.focus();
+    typingIn.setSelectionRange(at + gap.length + name.length, at + gap.length + name.length);
+    typingIn.dispatchEvent(new Event('input'));
+  });
 
   let generation = 0;
   async function analyze() {
@@ -116,37 +198,28 @@ export function mount(section, am) {
     $(section, '[data-timing]').textContent = `${Math.round(performance.now() - t0)} ms`;
     if (!r.ok) { setChip(chip, 'warn', 'Not a formula yet'); $(section, '[data-error]').textContent = r.error; return; }
     $(section, '[data-error]').textContent = '';
-    const vars = r.truth.vars, rows = r.truth.rows, senses = mode === 'senses';
-    const possible = r.truth.possible || rows.map(() => true), can = possible.filter(Boolean).length;
-    const count = rows.filter((row, i) => possible[i] && row[row.length - 1]).length;
-    const every = can === rows.length, where = every ? '' : ' that can occur';
-    setChip(chip, 'ok', count === can ? (every ? 'Always true' : 'True in every row that can occur')
-      : count === 0 ? (every ? 'Never true' : 'Never true in a row that can occur') : `True in ${count} of ${can} rows${where}`);
+    const senses = mode === 'senses';
+    for (const card of section.querySelectorAll('[data-plain]')) card.hidden = senses;
+    for (const card of ['[data-senses-card]', '[data-outputs]', '[data-rules-card]', '[data-pla-card]']) $(section, card).hidden = !senses;
+    $(section, '[data-conditions-card]').hidden = !senses || !r.conditions?.length;
+    if (senses) {
+      $(section, '[data-puzzle]').hidden = $(section, '[data-venn-card]').hidden = true;
+      showSenses(r);
+      return;
+    }
+    const vars = r.truth.vars, rows = r.truth.rows;
+    const count = rows.filter((row) => row[row.length - 1]).length;
+    setChip(chip, 'ok', count === rows.length ? 'Always true' : count === 0 ? 'Never true' : `True in ${count} of ${rows.length} rows`);
     tex($(section, '[data-latex]'), r.latex);
-    $(section, '[data-letters]').hidden = !senses;
-    if (senses) tex($(section, '[data-letters-tex]'), r.lettersLatex);
     tex($(section, '[data-simplified]'), r.simplifiedLatex);
-    $(section, '[data-simplified-check]').textContent = !r.simplifiedEquivalent ? 'Not shown equivalent.'
-      : `✓ Equivalent: AngouriMath’s truth table of (formula xor simplified) has no true row.${senses ? ' AngouriMath knows the logic but not the invariants.' : ''}`;
-    $(section, '[data-sop-title]').textContent = senses ? 'Minimal, using the invariants' : 'Minimal sum of products';
+    $(section, '[data-simplified-check]').textContent = r.simplifiedEquivalent ? '✓ Equivalent: AngouriMath’s truth table of (formula xor simplified) has no true row.' : 'Not shown equivalent.';
     tex($(section, '[data-sop]'), r.sopLatex);
-    $(section, '[data-sop-check]').textContent = !r.sopEquivalent ? 'Not shown equivalent.' : senses
-      ? '✓ Equal to the formula wherever the invariants hold: AngouriMath’s truth table of (formula xor minimal) and invariants has no true row. Found by Quine–McCluskey, with the rows that cannot occur as don’t-cares.'
-      : '✓ Equivalent, checked the same way. Found by Quine–McCluskey with an exact cover.';
+    $(section, '[data-sop-check]').textContent = r.sopEquivalent ? '✓ Equivalent, checked the same way. Found by Quine–McCluskey with an exact cover.' : 'Not shown equivalent.';
     $(section, '[data-truth]').replaceChildren(truthTable(r.truth));
     $(section, '[data-kmap-card]').hidden = vars.length > 4;
-    if (vars.length <= 4) kmap($(section, '[data-kmap]'), vars, rows, r.groups, r.dontCares);
-    $(section, '[data-kmap-note]').textContent = (r.groups.length ? 'Each outline is one product term of the minimal sum; outlines that reach an edge continue on the opposite side.' : '')
-      + (r.dontCares?.length ? ' A dash is a row the invariants rule out, so an outline may cover it or not.' : '');
-    $(section, '[data-circuit-title]').textContent = senses ? 'Circuit for the minimal form, each input in the sense it needs' : 'Circuit for the simplified form';
+    if (vars.length <= 4) kmap($(section, '[data-kmap]'), vars, rows, r.groups);
+    $(section, '[data-kmap-note]').textContent = r.groups.length ? 'Each outline is one product term of the minimal sum; outlines that reach an edge continue on the opposite side.' : '';
     circuit($(section, '[data-circuit]'), r.circuit);
-
-    $(section, '[data-senses-card]').hidden = !senses;
-    $(section, '[data-rules-card]').hidden = !senses;
-    if (senses) {
-      $(section, '[data-senses]').innerHTML = sensesTable(r.senses);
-      rules($(section, '[data-rules]'), r);
-    }
 
     const puzzle = current?.puzzle;
     $(section, '[data-puzzle]').hidden = !puzzle;
@@ -165,6 +238,23 @@ export function mount(section, am) {
     }
   }
 
+  function showSenses(r) {
+    const n = r.inputs.length, rows = r.truth.rows, possible = r.truth.possible, can = possible.filter(Boolean).length;
+    const every = can === rows.length, where = every ? '' : ' that can occur';
+    if (r.outputs.length === 1) {
+      const count = rows.filter((row, i) => possible[i] && row[n]).length;
+      setChip(chip, 'ok', count === can ? (every ? 'Always true' : 'True in every row that can occur')
+        : count === 0 ? (every ? 'Never true' : 'Never true in a row that can occur') : `True in ${count} of ${can} rows${where}`);
+    } else
+      setChip(chip, 'ok', `${r.outputs.length} outputs of ${n} inputs, ${every ? `all ${rows.length} rows can occur` : `${can} of ${rows.length} rows can occur`}`);
+    $(section, '[data-senses]').innerHTML = sensesTable(r.senses);
+    conditions($(section, '[data-conditions]'), r);
+    $(section, '[data-outputs]').replaceChildren(...r.outputs.map((o, k) => outputCard(o, k, r)));
+    rules($(section, '[data-rules]'), r);
+    $(section, '[data-truth]').replaceChildren(truthTable(r.truth));
+    pla($(section, '[data-pla]'), r.inputs, r.outputs);
+  }
+
   setMode('logic');
   return { show() {}, hide() {} };
 }
@@ -172,10 +262,61 @@ export function mount(section, am) {
 // ---------------------------------------------------------------- senses
 
 function sensesTable(list) {
-  const body = list.map((s) => `<tr><td>${escapeHtml(s.word)}</td><td>${s.negated ? 'not ' : ''}${escapeHtml(s.letter)}</td>`
-    + (s.pair ? `<td>${escapeHtml(s.pair)}</td><td>${escapeHtml(s.source || '')}</td>` : '<td colspan="2">not in the catalogue: a letter of its own</td>')
+  const body = list.map((s) => `<tr><td>${escapeHtml(s.word)}${s.output ? ' <em>output</em>' : ''}</td><td>${s.negated ? 'not ' : ''}${escapeHtml(s.letter)}</td>`
+    + (s.pair ? `<td>${escapeHtml(s.pair)}</td><td>${escapeHtml(s.source || '')}</td>`
+      : `<td colspan="2">${s.condition ? `a condition: true when ${escapeHtml(s.condition)}` : 'not in the catalogue: a letter of its own'}</td>`)
     + '</tr>').join('');
   return `<table class="senses"><thead><tr><th>written</th><th>reads as</th><th>pair</th><th>source</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function conditions(box, r) {
+  box.replaceChildren();
+  for (const c of r.conditions) {
+    const row = document.createElement('div');
+    row.className = 'condition';
+    row.innerHTML = `<span>${c.name ? escapeHtml(c.name) : 'in a formula'}</span><div class="tex"></div>`;
+    tex(row.lastElementChild, c.latex, false);
+    box.append(row);
+  }
+  const foot = document.createElement('p');
+  foot.className = 'foot';
+  foot.textContent = ['Each comparison is one input, true where it holds; its negation is written turned round, as T ≤ 100 for not (T > 100). How comparisons on one number constrain each other is worked out by AngouriMath and listed with the invariants.', ...r.notes].join(' ');
+  box.append(foot);
+}
+
+function outputCard(o, k, r) {
+  const n = r.inputs.length, card = document.createElement('article');
+  card.className = 'card wide';
+  card.innerHTML = `<h3>${o.name ? `Output <span class="name">${escapeHtml(o.name)}</span>` : 'The formula'}</h3>
+    <div class="output-grid">
+      <div>
+        <div class="tex" data-k="written"></div>
+        <div data-k="letters-box"><p class="foot">In letters</p><div class="tex" data-k="letters"></div></div>
+        <p class="foot">Simplified by AngouriMath, which knows the logic but not the invariants</p>
+        <div class="tex" data-k="simplified"></div><p class="foot" data-k="simplified-check"></p>
+        <p class="foot"><strong>Minimal, using the invariants</strong></p>
+        <div class="tex" data-k="minimal"></div><p class="foot" data-k="minimal-check"></p>
+      </div>
+      <div data-k="kmap-box"><div class="scroll-x" data-k="kmap"></div><p class="foot" data-k="kmap-note"></p></div>
+    </div>`;
+  const q = (key) => card.querySelector(`[data-k="${key}"]`);
+  const named = (latex) => (o.nameLatex && latex ? `${o.nameLatex} = ${latex}` : latex);
+  tex(q('written'), named(o.latex));
+  q('letters-box').hidden = o.lettersLatex === o.latex;
+  tex(q('letters'), named(o.lettersLatex));
+  tex(q('simplified'), named(o.simplifiedLatex));
+  q('simplified-check').textContent = o.simplifiedEquivalent ? '✓ Equivalent: AngouriMath’s truth table of (formula xor simplified) has no true row.' : 'Not shown equivalent.';
+  tex(q('minimal'), named(o.sopLatex));
+  q('minimal-check').textContent = o.sopEquivalent
+    ? '✓ Equal to the formula wherever the invariants hold: AngouriMath’s truth table of (formula xor minimal) and invariants has no true row. Found by Quine–McCluskey, with the rows that cannot occur as don’t-cares.'
+    : 'Not shown equivalent.';
+  if (n <= 4) {
+    kmap(q('kmap'), r.truth.vars, r.truth.rows.map((row) => [...row.slice(0, n), row[n + k]]), o.groups, r.dontCares);
+    q('kmap-note').textContent = (o.groups.length ? 'Karnaugh map: each outline is one product term of the minimal form, and outlines that reach an edge continue on the opposite side.' : 'Karnaugh map.')
+      + (r.dontCares.length ? ' A dash is a row the invariants rule out, so an outline may cover it or not.' : '');
+  } else
+    q('kmap-box').innerHTML = '<p class="foot">More than four inputs, so no Karnaugh map; the truth table has every row.</p>';
+  return card;
 }
 
 function rules(box, r) {
@@ -186,14 +327,15 @@ function rules(box, r) {
   }
   for (const rule of r.rules) {
     const item = document.createElement('div');
-    item.innerHTML = `<div class="tex"></div><p class="foot">${rule.builtin ? `From the catalogue. ${escapeHtml(rule.why)}` : 'Yours.'}</p>`;
+    item.innerHTML = `<div class="tex"></div><p class="foot">${rule.builtin ? `Built in. ${escapeHtml(rule.why)}` : 'Yours.'}</p>`;
     tex(item.firstElementChild, rule.latex);
     box.append(item);
   }
-  const fault = document.createElement('div');
-  fault.innerHTML = '<p class="foot" style="font-weight:600;color:var(--ink)">Fault alarm</p><div class="tex"></div><p class="foot"></p>';
-  tex(fault.children[1], r.faultLatex);
-  fault.children[2].textContent = r.faultNever ? 'The invariants hold in every row, so they rule nothing out and nothing can contradict them.'
+  const fault = document.createElement('div'), terms = r.faultTerms?.length > 1 ? r.faultTerms : [r.faultLatex];
+  fault.innerHTML = `<p class="foot" style="font-weight:600;color:var(--ink)">Fault alarm${terms.length > 1 ? ', when any of these holds' : ''}</p>`
+    + terms.map(() => '<div class="tex"></div>').join('') + '<p class="foot"></p>';
+  terms.forEach((latex, i) => tex(fault.children[1 + i], latex));
+  fault.lastElementChild.textContent = r.faultNever ? 'The invariants hold in every row, so they rule nothing out and nothing can contradict them.'
     : `True exactly in the rows the invariants rule out, so with correct signals it never fires: when it does, a sensor or its wiring is wrong.${r.faultEquivalent ? ' ✓ Equivalent to not (invariants), checked by truth table.' : ''}`;
   box.append(fault);
 }
@@ -303,6 +445,101 @@ function circuit(box, tree) {
     else svg += `<rect x="${x - 20}" y="${y - 14}" width="42" height="28" rx="4" style="${body}"/><text x="${x + 1}" y="${y + 4}" font-size="11" text-anchor="middle" style="fill:var(--ink)">${escapeHtml(g === 'implies' ? '→' : g)}</text>`;
   }
   box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gate circuit of the simplified formula, inputs on the left">${svg}</svg>`;
+}
+
+// ---------------------------------------------------------------- circuit of several outputs
+
+// Two levels, as a PLA draws them: each literal once on the left with a vertical rail, an AND gate
+// per product term shared by every output that uses it, a rail per term, and an OR gate per output
+// with its name on the right. A term of one literal needs no AND, and an output of one term no OR.
+function pla(box, inputs, outputs) {
+  const n = inputs.length;
+  const terms = [], byKey = new Map();
+  outputs.forEach((o, k) => o.groups.forEach((g) => {
+    const key = `${g.mask}:${g.value}`;
+    if (!byKey.has(key)) {
+      const lits = [];
+      for (let i = 0; i < n; i++) {
+        const bit = 1 << (n - 1 - i);
+        if (g.mask & bit) lits.push(`${i}:${g.value & bit ? 1 : 0}`);
+      }
+      byKey.set(key, { lits, outs: [] });
+      terms.push(byKey.get(key));
+    }
+    byKey.get(key).outs.push(k);
+  }));
+  const used = [];
+  for (let i = 0; i < n; i++)
+    for (const v of [1, 0]) if (terms.some((t) => t.lits.includes(`${i}:${v}`))) used.push(`${i}:${v}`);
+  const label = (lit) => { const [i, v] = lit.split(':').map(Number); return v ? inputs[i].label : inputs[i].opposite; };
+  const ofOutput = outputs.map((_, k) => terms.filter((t) => t.outs.includes(k)));
+
+  // Rows: each column is stacked on its own and centred on the tallest.
+  const PITCH = 34, PIN = 12, gap = (m) => Math.max(PITCH, m * PIN + 14);
+  const stack = (sizes) => { let y = 0; return sizes.map((s) => { const at = y + s / 2; y += s; return at; }).concat([y]); };
+  const litYs = stack(used.map(() => PITCH)), termYs = stack(terms.map((t) => gap(t.lits.length))), outYs = stack(ofOutput.map((ts) => gap(ts.length)));
+  const H = Math.max(litYs.pop(), termYs.pop(), outYs.pop()) + 24;
+  const centre = (ys, h) => ys.map((y) => y + (H - h) / 2);
+  const ly = centre(litYs, used.length * PITCH), ty = centre(termYs, terms.reduce((s, t) => s + gap(t.lits.length), 0)), oy = centre(outYs, ofOutput.reduce((s, ts) => s + gap(ts.length), 0));
+
+  // Columns, left to right.
+  const LW = Math.max(40, ...used.map((l) => label(l).length * 7 + 14)), rail1 = (j) => 8 + LW + 18 + j * 14;
+  const XA = rail1(Math.max(used.length - 1, 0)) + 50, TIP = XA + 22, rail2 = (t) => TIP + 18 + t * 14;
+  const XO = rail2(Math.max(terms.length - 1, 0)) + 50, OUT = XO + 20;
+  const W = OUT + 30 + Math.max(...outputs.map((o) => (o.name || 'ƒ').length * 7.5)) + 12;
+  const wire = 'stroke:var(--ink);stroke-width:1.5;fill:none', body = 'stroke:var(--ink);stroke-width:1.6;fill:var(--surface)';
+  let wires = '', parts = '';
+  const dot = (x, y) => `<circle cx="${x}" cy="${y}" r="3" style="fill:var(--ink)"/>`;
+  // A rail joins an entry to its taps; a dot marks each point that is not an end of the rail.
+  const rail = (x, entry, taps) => {
+    const ys = [entry, ...taps], lo = Math.min(...ys), hi = Math.max(...ys);
+    wires += `<path d="M${x} ${lo} V${hi}" style="${wire}"/>`;
+    for (const y of new Set(ys)) if (y > lo && y < hi) wires += dot(x, y);
+  };
+  const pins = (count, y) => Array.from({ length: count }, (_, i) => y + (i - (count - 1) / 2) * PIN);
+
+  used.forEach((lit, j) => {
+    const taps = [];
+    terms.forEach((t, ti) => {
+      const at = t.lits.indexOf(lit);
+      if (at < 0) return;
+      const y = t.lits.length === 1 ? ty[ti] : pins(t.lits.length, ty[ti])[at];
+      taps.push(y);
+      wires += `<path d="M${rail1(j)} ${y} H${t.lits.length === 1 ? TIP : XA - 20}" style="${wire}"/>`;
+    });
+    wires += `<path d="M${8 + LW} ${ly[j]} H${rail1(j)}" style="${wire}"/>`;
+    rail(rail1(j), ly[j], taps);
+    parts += `<rect x="8" y="${ly[j] - 12}" width="${LW}" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/>`
+      + `<text x="${8 + LW / 2}" y="${ly[j] + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">${escapeHtml(label(lit))}</text>`;
+  });
+  terms.forEach((t, ti) => {
+    const y = ty[ti], hh = gap(t.lits.length) / 2 - 6;
+    if (t.lits.length === 0)
+      parts += `<rect x="${XA - 14}" y="${y - 12}" width="28" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/><text x="${XA}" y="${y + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">1</text>`;
+    else if (t.lits.length > 1)
+      parts += `<path d="M${XA - 20} ${y - hh} H${XA} Q${TIP} ${y - hh} ${TIP} ${y} Q${TIP} ${y + hh} ${XA} ${y + hh} H${XA - 20} Z" style="${body}"/>`;
+    const taps = [];
+    outputs.forEach((_, k) => {
+      const at = ofOutput[k].indexOf(t);
+      if (at < 0) return;
+      const single = ofOutput[k].length === 1, py = single ? oy[k] : pins(ofOutput[k].length, oy[k])[at];
+      taps.push(py);
+      wires += `<path d="M${rail2(ti)} ${py} H${single ? OUT : XO - 16}" style="${wire}"/>`;
+    });
+    wires += `<path d="M${t.lits.length === 0 ? XA + 14 : TIP} ${y} H${rail2(ti)}" style="${wire}"/>`;
+    rail(rail2(ti), y, taps);
+  });
+  outputs.forEach((o, k) => {
+    const y = oy[k], m = ofOutput[k].length, hh = gap(m) / 2 - 6;
+    if (m === 0)
+      parts += `<rect x="${XO - 14}" y="${y - 12}" width="28" height="24" rx="6" style="fill:var(--code);stroke:var(--rule)"/><text x="${XO}" y="${y + 4}" font-size="12" text-anchor="middle" style="fill:var(--ink);font-family:var(--font-mono)">0</text>`
+        + `<path d="M${XO + 14} ${y} H${OUT}" style="${wire}"/>`;
+    else if (m > 1)
+      parts += `<path d="M${XO - 20} ${y - hh} Q${XO + 6} ${y - hh} ${OUT} ${y} Q${XO + 6} ${y + hh} ${XO - 20} ${y + hh} Q${XO - 10} ${y} ${XO - 20} ${y - hh} Z" style="${body}"/>`;
+    parts += `<path d="M${OUT} ${y} H${OUT + 16}" style="${wire}"/>${dot(OUT + 16, y)}`
+      + `<text x="${OUT + 26}" y="${y + 4}" font-size="13" style="fill:var(--ink);font-family:var(--font-mono)">${escapeHtml(o.name || 'ƒ')}</text>`;
+  });
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Two-level circuit of every output, inputs on the left and outputs on the right">${wires}${parts}</svg>`;
 }
 
 // ---------------------------------------------------------------- Venn diagram
