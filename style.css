@@ -138,6 +138,9 @@ button { cursor: pointer; }
 }
 .runtime[data-state="ready"]::before { content: "● "; color: var(--ok); }
 .runtime[data-state="failed"]::before, .runtime[data-state="restarting"]::before { content: "● "; color: var(--bad); }
+@media (max-width: 1180px) {
+  .runtime { max-width: 16ch; }
+}
 @media (max-width: 760px) {
   .runtime { display: none; }
   .brand span { display: none; }
@@ -409,3 +412,27 @@ details.catalogue .foot { margin: 8px 0; }
 
 svg text { font-family: var(--font-body); }
 .diagram { width: 100%; height: auto; display: block; }
+
+/* ------------------------------------------------------------------ forms, numbers, matrices */
+.forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px 18px; }
+.forms .alternatives { grid-column: 1 / -1; }
+.forms ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.forms li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.forms li > span { flex: none; width: 1.4em; text-align: right; font-size: 12px; color: var(--ink-soft); }
+.forms li > .tex { flex: 1; }
+pre.digits { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips:empty { display: none; }
+.chips span { padding: 1px 7px; border-radius: 999px; background: var(--code); font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+table.bases { border-collapse: collapse; width: 100%; }
+table.bases th { padding: 4px 12px 4px 0; text-align: left; font-size: 12px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; vertical-align: top; }
+table.bases td { padding: 4px 0; font: 12.5px/1.5 var(--font-mono); overflow-wrap: anywhere; word-break: break-all; }
+table.bases tr + tr > * { border-top: 1px solid var(--rule); }
+.from-base { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-soft); }
+.from-base input, .from-base select { padding: 5px 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--field); font: 14px var(--font-mono); }
+.from-base input { width: 12ch; }
+svg.plane { max-width: 360px; }
+.eigen { display: grid; gap: 6px; }
+.eigen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 4px 18px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+.card canvas[data-picture] { height: min(420px, 90vw); }
+.checks.facts dd { font-family: var(--font-body); font-variant-numeric: tabular-nums; }

@@ -9,6 +9,8 @@ const PRESETS = [
   { label: 'A set', formula: '[1; 3) \\/ (2; 5] \\/ {7}' },
   { label: 'A number', formula: 'sqrt(2) + pi / 3' },
   { label: 'Shared parts', formula: '(x + 1)^2 - x^2 + sqrt((x + 1)^2 + 1)' },
+  { label: 'A cubic', formula: 'x^3 - 6x^2 + 11x - 6' },
+  { label: 'Fractions', formula: '1/(x - 1) + 1/(x + 1)' },
 ];
 
 const MARKUP = `
@@ -27,6 +29,7 @@ const MARKUP = `
   <div class="cards">
     <article class="card"><h3>Rendered</h3><div class="tex" data-latex></div></article>
     <article class="card"><h3>Simplified by AngouriMath</h3><div class="tex" data-simplified></div><p class="foot" data-simplified-text></p></article>
+    <article class="card wide"><h3>Other forms</h3><div class="forms" data-forms></div></article>
     <article class="card wide"><h3 data-picture-title>Picture</h3><div data-picture></div><p class="foot" data-picture-note></p></article>
     <article class="card wide"><h3>Expression tree</h3><p class="foot" data-tree-note></p><div class="scroll-x" data-tree></div></article>
     <article class="card"><h3>Text, as AngouriMath prints it</h3><pre data-text></pre></article>
@@ -77,6 +80,7 @@ export function mount(section, am) {
     tex($(section, '[data-latex]'), r.latex);
     tex($(section, '[data-simplified]'), r.simplifiedLatex);
     $(section, '[data-simplified-text]').textContent = r.simplified === r.text ? 'Already as simple as AngouriMath makes it.' : r.simplified;
+    showForms($(section, '[data-forms]'), r.forms, r.text);
     $(section, '[data-text]').textContent = r.text;
     $(section, '[data-latex-source]').textContent = r.latex;
     $(section, '[data-sympy]').textContent = r.sympy || 'No SymPy form.';
@@ -132,6 +136,34 @@ export function mount(section, am) {
   }
 
   return { show() {}, hide() {} };
+}
+
+// ---------------------------------------------------------------- forms
+
+/** The rewrites side by side, and the forms simplify weighs, simplest first. */
+function showForms(box, forms, text) {
+  box.replaceChildren();
+  const add = (label, latex, foot) => {
+    const div = document.createElement('div');
+    div.className = 'labelled';
+    div.innerHTML = `<span>${escapeHtml(label)}</span><div class="tex"></div>${foot ? `<p class="foot">${escapeHtml(foot)}</p>` : ''}`;
+    tex(div.children[1], latex);
+    box.append(div);
+  };
+  const same = (form) => (form.text === text ? 'As written.' : '');
+  add('Expanded: products multiplied out', forms.expanded.latex, same(forms.expanded));
+  add('Factorised: common factors gathered, polynomials factored', forms.factorized.latex, same(forms.factorized));
+  add('Normalised: one tidying pass, without a search', forms.normalized.latex, same(forms.normalized));
+  const alternatives = document.createElement('div');
+  alternatives.className = 'labelled alternatives';
+  alternatives.innerHTML = '<span>Forms simplify weighs against each other, simplest first</span><ol></ol>';
+  forms.alternatives.forEach((a, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${i + 1}</span><div class="tex"></div>`;
+    tex(li.lastChild, a.latex);
+    alternatives.lastChild.append(li);
+  });
+  box.append(alternatives);
 }
 
 // ---------------------------------------------------------------- pictures

@@ -4,12 +4,16 @@ import { niceStep } from './representations.js';
 const PRESETS = [
   { label: 'Cubic', formula: 'x^3 - 3x + 1', area: [-1, 1], range: [-3, 3],
     note: 'Three real roots, which AngouriMath gives exactly by Cardano’s formula: through complex cube roots, although all three are real.' },
-  { label: 'sin(x)/x', formula: 'sin(x) / x', area: [0, 2], point: 1, range: [-16, 16],
+  { label: 'sin(x)/x', formula: 'sin(x) / x', area: [0, 2], point: 1, range: [-16, 16], at: '0',
     note: 'Roots come back as families, 2πn and π + 2πn, with the condition that excludes 0. The antiderivative is the sine integral Si.' },
   { label: 'Gaussian bump', formula: 'x e^(-x^2)', area: [0, 2], range: [-3, 3] },
-  { label: 'ln(x)/x', formula: 'ln(x) / x', area: [1, 4], point: 1, range: [-1, 9], note: 'Defined for x > 0 only; the plot leaves the rest empty.' },
+  { label: 'ln(x)/x', formula: 'ln(x) / x', area: [1, 4], point: 1, range: [-1, 9], at: '0', note: 'Defined for x > 0 only; the plot leaves the rest empty.' },
   { label: 'Double well', formula: 'x^4 - 2x^2', area: [-1, 1], range: [-2.2, 2.2] },
-  { label: 'e^x', formula: 'e^x', area: [0, 1], range: [-3, 2.5], note: 'Its own derivative and antiderivative; the Taylor polynomials are the familiar partial sums.' },
+  { label: 'e^x', formula: 'e^x', area: [0, 1], range: [-3, 2.5], at: '-oo', note: 'Its own derivative and antiderivative; the Taylor polynomials are the familiar partial sums.' },
+  { label: 'Asymptotes', formula: '(2x^2 - 1) / (x^2 - 4)', area: [-1, 1], range: [-6, 6], at: '2',
+    note: 'Poles at x = ±2, where the one-sided limits go off to opposite infinities, and the line y = 2 that f approaches at both ends.' },
+  { label: 'A hole', formula: '(x^2 - 1) / (x - 1)', area: [-1, 2], range: [-3, 3], at: '1',
+    note: 'The line y = x + 1 with the point x = 1 taken out: f has no value there, but its limit is 2.' },
 ];
 
 const CURVES = [
@@ -51,6 +55,13 @@ const MARKUP = `
       <div class="labelled"><span>Inflection candidates, solving f″ = 0 (squares)</span><div class="tex" data-inflections></div><p class="foot" data-inflections-n></p></div>
     </div>
     <div class="section">
+      <div class="labelled"><span>Limits at both ends and where f has no value (dashed: asymptotes; open dots: holes and jumps)</span><div class="tex" data-limits></div><p class="foot" data-limits-note></p></div>
+      <label class="field-label" for="calc-at">Limit as x approaches a number, pi/2, +oo or -oo</label>
+      <div class="formula"><span aria-hidden="true">x →</span><input id="calc-at" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+      <div class="tex" data-limit-at></div>
+      <p class="error" data-limit-error></p>
+    </div>
+    <div class="section">
       <div class="slider">
         <label for="calc-order">Taylor polynomial of order</label><output data-order-out></output>
         <input id="calc-order" type="range" min="0" max="8" step="1" value="3">
@@ -82,7 +93,7 @@ export function mount(section, am) {
   const canvas = $(section, 'canvas'), chip = $(section, '[data-chip]');
   collapsible($(section, '.panel'));
   const view = { x0: -6, x1: 6, y0: -3, y1: 3, fitted: false };
-  const data = { n: 0, curves: null, points: { roots: [], extrema: [], inflections: [] } };
+  const data = { n: 0, curves: null, points: { roots: [], extrema: [], inflections: [] }, limits: null };
   const ui = { order: 3, point: 0, a: -1, b: 1, formula: '' };
   let range = [-6, 6];
   // Shows [a, b] in the part of the canvas the panel does not cover.
@@ -171,6 +182,36 @@ export function mount(section, am) {
       ctx.stroke();
     }
     ctx.setLineDash([]);
+
+    // What the limits say: dashed asymptotes, and open dots where f has no value but a limit.
+    const lim = data.limits;
+    if (lim && shown.f) {
+      ctx.save();
+      ctx.setLineDash([6 * s, 5 * s]);
+      ctx.strokeStyle = token('--ink-soft');
+      ctx.lineWidth = 1.3 * s;
+      // An asymptote at one end is drawn over that half; one the two ends share, across.
+      const mid = (view.x0 + view.x1) / 2;
+      const shared = lim.minus.kind === 'value' && lim.plus.kind === 'value' && lim.minus.value === lim.plus.value;
+      for (const [end, from, to] of [[lim.minus, view.x0, shared ? view.x1 : mid], [lim.plus, shared ? view.x1 : mid, view.x1]]) {
+        if (end.kind !== 'value') continue;
+        ctx.beginPath(); ctx.moveTo(toX(from, w), toY(end.value, h)); ctx.lineTo(toX(to, w), toY(end.value, h)); ctx.stroke();
+      }
+      for (const p of lim.points)
+        if ([p.left.kind, p.right.kind].some((k) => k === '+oo' || k === '-oo')) {
+          ctx.beginPath(); ctx.moveTo(toX(p.x, w), 0); ctx.lineTo(toX(p.x, w), h); ctx.stroke();
+        }
+      ctx.restore();
+      for (const p of lim.points) {
+        if (p.defined) continue;
+        for (const side of [p.left, p.right]) {
+          if (side.kind !== 'value') continue;
+          ctx.beginPath(); ctx.arc(toX(p.x, w), toY(side.value, h), 5 * s, 0, Math.PI * 2);
+          ctx.fillStyle = token('--surface'); ctx.fill();
+          ctx.lineWidth = 2 * s; ctx.strokeStyle = token('--plot-1'); ctx.stroke();
+        }
+      }
+    }
 
     // Special points, placed on f by interpolating its samples.
     const fAt = (x) => {
@@ -264,6 +305,57 @@ export function mount(section, am) {
     draw();
   }
 
+  // A limit as LaTeX: lim f(x) = its value, or why there is none.
+  function limitTex(where, l) {
+    const lhs = `\\lim_{${where}} f(x)`;
+    if (l.kind === 'none') return `${lhs} &\\text{ does not exist}`;
+    if (l.kind === 'unknown') return `${lhs} &\\text{: AngouriMath leaves it open}`;
+    return `${lhs} &= ${l.kind === '+oo' ? '+\\infty' : l.kind === '-oo' ? '-\\infty' : l.latex}`;
+  }
+  const sameLimit = (a, b) => a.kind === b.kind && a.latex === b.latex;
+  // One line for a two-sided limit, two where the sides differ.
+  const pointTex = (at, left, right) => sameLimit(left, right)
+    ? [limitTex(`x \\to ${at}`, left)]
+    : [limitTex(`x \\to ${at}^-`, left), limitTex(`x \\to ${at}^+`, right)];
+  const aligned = (lines) => `\\begin{aligned}${lines.join(' \\\\ ')}\\end{aligned}`;
+
+  async function limits(text, mine) {
+    let r;
+    try { r = await am.json('CalculusJs', 'Limits', [text]); } catch { return; }
+    if (mine !== generation || !r.ok) return;
+    data.limits = r;
+    const lines = [limitTex('x \\to -\\infty', r.minus), limitTex('x \\to +\\infty', r.plus)];
+    const kinds = [];
+    for (const p of r.points) {
+      lines.push(...pointTex(p.at, p.left, p.right));
+      const pole = [p.left.kind, p.right.kind].some((k) => k === '+oo' || k === '-oo');
+      const kind = pole ? 'a pole' : !sameLimit(p.left, p.right) ? 'a jump' : p.defined ? 'no break' : 'a hole';
+      kinds.push(`${kind} at x = ${+p.x.toFixed(6)}`);
+    }
+    tex($(section, '[data-limits]'), aligned(lines));
+    $(section, '[data-limits-note]').textContent = r.points.length
+      ? `A denominator or a logarithm’s argument is zero there: ${kinds.join(', ')}.`
+      : 'No denominator or logarithm of f is zero near the origin.';
+    draw();
+  }
+
+  async function limitAt() {
+    const err = $(section, '[data-limit-error]'), box = $(section, '[data-limit-at]');
+    if (!ui.formula) return;
+    let r;
+    try { r = await am.json('CalculusJs', 'LimitAt', [ui.formula, atIn.value]); } catch (e) { err.textContent = e.message; return; }
+    if (!r.ok) { err.textContent = r.error; tex(box, ''); return; }
+    err.textContent = '';
+    if (r.limit) {
+      const at = r.at.trim().startsWith('-') ? r.at : `+${r.at}`;
+      tex(box, aligned([limitTex(`x \\to ${at}`, r.limit)]));
+      return;
+    }
+    const lines = pointTex(r.at, r.left, r.right);
+    lines.push(r.value === null ? `f(${r.at}) &\\text{ has no value}` : `f(${r.at}) &= ${+r.value.toPrecision(12)}`);
+    tex(box, aligned(lines));
+  }
+
   let generation = 0;
   async function analyze(text) {
     const mine = ++generation, t0 = performance.now();
@@ -282,6 +374,9 @@ export function mount(section, am) {
     $(section, '[data-error]').textContent = '';
     ui.formula = text;
     view.fitted = false;
+    data.limits = null;
+    limits(text, mine);
+    limitAt();
     tex($(section, '[data-d1]'), r.d1);
     tex($(section, '[data-d2]'), r.d2);
     tex($(section, '[data-integral]'), r.integral || '\\text{no antiderivative found}');
@@ -298,7 +393,7 @@ export function mount(section, am) {
   }
 
   // ------------------------------------------------------------ controls
-  const input = $(section, '#calc-input'), note = $(section, '[data-note]');
+  const input = $(section, '#calc-input'), note = $(section, '[data-note]'), atIn = $(section, '#calc-at');
   const orderIn = $(section, '#calc-order'), pointIn = $(section, '#calc-point'), aIn = $(section, '#calc-a'), bIn = $(section, '#calc-b');
   const syncLabels = () => {
     $(section, '[data-order-out]').textContent = ui.order;
@@ -311,6 +406,7 @@ export function mount(section, am) {
     note.textContent = p.note || '';
     press(p.label);
     ui.a = p.area[0]; ui.b = p.area[1]; ui.point = p.point ?? 0;
+    atIn.value = p.at ?? '+oo';
     aIn.value = ui.a * 10; bIn.value = ui.b * 10; pointIn.value = ui.point * 8;
     frame(p.range);
     syncLabels();
@@ -323,6 +419,7 @@ export function mount(section, am) {
   const laterTaylor = debounce(() => taylor(), 250);
   pointIn.addEventListener('input', () => { ui.point = +pointIn.value / 8; syncLabels(); laterTaylor(); });
   const laterArea = debounce(() => area(), 150);
+  atIn.addEventListener('input', debounce(() => limitAt(), 400));
   aIn.addEventListener('input', () => { ui.a = +aIn.value / 10; syncLabels(); draw(); laterArea(); });
   bIn.addEventListener('input', () => { ui.b = +bIn.value / 10; syncLabels(); draw(); laterArea(); });
 

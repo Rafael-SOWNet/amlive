@@ -53,7 +53,7 @@ const MARKUP = `
     </div>
     <div class="section">
       <div class="labelled"><span>Units of L, checked by AngouriMath</span><div class="foot" data-units style="font-family:var(--font-mono)"></div></div>
-      <div class="labelled"><span>Equations of motion, d/dt ∂L/∂w = ∂L/∂q, derived by AngouriMath</span><div class="tex" data-equation></div></div>
+      <div class="labelled"><span>Equations of motion, d/dt ∂L/∂w = ∂L/∂q, derived by AngouriMath</span><div class="tex" data-equation></div><p class="foot" data-mass></p></div>
       <div class="labelled"><span>Conserved energy, Σ w ∂L/∂w − L</span><div class="tex" data-energy></div></div>
     </div>
     <div class="section">
@@ -124,6 +124,7 @@ export function mount(section, am) {
       $(section, '[data-units]').textContent = '';
       tex($(section, '[data-equation]'), '');
       tex($(section, '[data-energy]'), '');
+      $(section, '[data-mass]').replaceChildren();
       states = [];
       return;
     }
@@ -132,6 +133,10 @@ export function mount(section, am) {
     $(section, '[data-units]').textContent = r.units;
     tex($(section, '[data-equation]'), r.equation);
     tex($(section, '[data-energy]'), `E = ${r.energy}`);
+    // The matrix on the left, as AngouriMath writes it, can be taken apart in the Matrices tab.
+    $(section, '[data-mass]').innerHTML = r.mass
+      ? `<a href="#matrices?a=${encodeURIComponent(r.mass)}">The mass matrix in the Matrices tab</a>: its determinant, inverse and eigenvalues.`
+      : '';
     phaseProg = null;
     if (pgl && r.energyGlsl) {
       try { phaseProg = linkProgram(pgl, FULLSCREEN_VS, PHASE_FS(r.energyGlsl)); } catch { phaseProg = null; }

@@ -10,6 +10,8 @@ const VIEWS = {
   logic: () => import('./views/logic.js'),
   regions: () => import('./views/regions.js'),
   motion: () => import('./views/motion.js'),
+  numbers: () => import('./views/numbers.js'),
+  matrices: () => import('./views/matrices.js'),
 };
 
 const runtime = document.getElementById('runtime');
@@ -27,10 +29,17 @@ const am = createAngouri((status) => {
 const mounted = new Map();
 let current = null;
 
+// A hash is the tab's name, optionally with a query a view reads when shown: #matrices?a=...
+const route = () => location.hash.slice(1).split('?')[0];
+
 async function show(name) {
   if (!VIEWS[name]) name = 'waves';
-  for (const a of document.querySelectorAll('#tabs a'))
-    a.setAttribute('aria-current', a.getAttribute('href') === `#${name}` ? 'page' : 'false');
+  for (const a of document.querySelectorAll('#tabs a')) {
+    const here = a.getAttribute('href') === `#${name}`;
+    a.setAttribute('aria-current', here ? 'page' : 'false');
+    // The bar scrolls sideways when the tabs do not fit; keep the open one in sight.
+    if (here) a.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   if (current === name) return;
   if (current) {
     const old = mounted.get(current);
@@ -54,5 +63,5 @@ async function show(name) {
   entry.view.show();
 }
 
-addEventListener('hashchange', () => show(location.hash.slice(1)));
-show(location.hash.slice(1));
+addEventListener('hashchange', () => show(route()));
+show(route());
