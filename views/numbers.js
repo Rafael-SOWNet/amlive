@@ -12,6 +12,8 @@ const PRESETS = [
   { label: 'Euler’s identity', n: 'e^(i pi)', note: 'e^(iπ) + 1 = 0: AngouriMath evaluates the power exactly, to −1.' },
   { label: 'Euclid', n: '1071', m: '462', note: 'gcd(1071, 462) = 21, the example Euclid’s algorithm is usually shown with.' },
   { label: 'Project Euler 3', n: '600851475143', note: 'Its largest prime factor is 6857.' },
+  { label: 'Cole’s number', n: '2^67 - 1',
+    note: 'Mersenne listed 2^67 − 1 as a prime. In 1903 Frank Nelson Cole showed that it is not by multiplying out its two factors; AngouriMath finds them by Pollard’s rho.' },
   { label: 'A complex quotient', n: '(1 + 2i) / (3 - i)', note: 'Complex fractions stay exact too.' },
   { label: 'A cube root', n: '(1 + i)^(1/3)', note: 'The principal cube root: one third of the angle, the cube root of the length.' },
   { label: '√2 to 1000 digits', n: 'sqrt(2)', digits: 1000 },
@@ -66,7 +68,7 @@ const MARKUP = `
       <h3>In other bases</h3>
       <div class="slider">
         <label for="num-base">And in base</label><output data-base-out></output>
-        <input id="num-base" type="range" min="2" max="16" step="1" value="3">
+        <input id="num-base" type="range" min="2" max="36" step="1" value="3">
       </div>
       <div class="scroll-x"><table class="bases" data-bases></table></div>
       <p class="foot" data-bases-note></p>
@@ -89,7 +91,7 @@ export function mount(section, am) {
   const input = $(section, '#num-input'), other = $(section, '#num-other'), chip = $(section, '[data-chip]'), note = $(section, '[data-note]');
   const digitsIn = $(section, '#num-digits'), baseIn = $(section, '#num-base');
   const fromIn = $(section, '#num-from'), fromBase = $(section, '#num-from-base');
-  for (let b = 2; b <= 16; b++) fromBase.add(new Option(String(b), String(b), false, b === 16));
+  for (let b = 2; b <= 36; b++) fromBase.add(new Option(String(b), String(b), false, b === 16));
 
   const syncLabels = () => {
     $(section, '[data-digits-out]').textContent = digitsIn.value;
@@ -155,8 +157,10 @@ export function mount(section, am) {
     $(section, '[data-bases]').innerHTML = r.bases.map((b) =>
       `<tr><th>base ${b.base}</th><td>${escapeHtml(b.digits)}${b.exact ? '' : '…'}</td></tr>`).join('');
     $(section, '[data-bases-note]').textContent = r.kind === 'rational'
-      ? 'A fraction by long division, its repeating block in brackets. AngouriMath’s ToBaseN turns a fraction into a decimal first, so it writes 1/7 in base 7 as 0.0666… where it is 0.1.'
-      : 'Written by AngouriMath’s ToBaseN, which cuts an expansion that does not end where the precision ends; … marks the cut. Its digits go up to F, so bases stop at 16.';
+      ? 'A fraction by long division, its repeating block in brackets. AngouriMath’s ToBaseN writes the same digits, exactly, and cuts a block that repeats where the precision ends.'
+      : r.kind === 'integer'
+        ? 'Written by AngouriMath’s ToBaseN, exactly, with digits up to Z for base 36.'
+        : 'Written by AngouriMath’s ToBaseN, with digits up to Z for base 36. An expansion that does not end is cut where the precision ends; … marks the cut.';
   }
 
   async function showInteger(r, mine) {
@@ -182,14 +186,10 @@ export function mount(section, am) {
       $(section, '[data-gcd]').innerHTML = '<dt></dt><dd>Type a second integer for their greatest common divisor, least common multiple and quotient.</dd>';
       shown($(section, '[data-ratio]'), '');
     }
-    if (!r.factorable) {
-      foot.textContent = 'Not factored: AngouriMath factors by trial division, which for a number past 10¹⁴ takes too long here, and past 2⁶³ overflows.';
-      return;
-    }
     let f;
     try {
       f = await am.json('NumbersJs', 'Factor', [input.value], { timeout: 15000 });
-    } catch (e) { if (mine === generation) foot.textContent = e.message; return; }
+    } catch (e) { if (mine === generation) foot.textContent = `Not factored. ${e.message}`; return; }
     if (mine !== generation) return;
     if (!f.ok) { foot.textContent = f.error; return; }
     shown(factors, `${r.decimal} = ${f.latex}`);

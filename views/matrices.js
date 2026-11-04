@@ -49,7 +49,7 @@ const MARKUP = `
     </article>
     <article class="card" data-square><h3>Inverse</h3><div class="tex" data-inverse></div><p class="foot" data-inverse-note></p><div class="tex" data-inverse-conditions hidden></div></article>
     <article class="card"><h3>Transpose</h3><div class="tex" data-transpose></div></article>
-    <article class="card"><h3>Reduced row echelon form</h3><div class="tex" data-rref></div><p class="foot" data-rref-note></p></article>
+    <article class="card"><h3>Reduced row echelon form</h3><div class="tex" data-rref></div><p class="foot" data-rref-note></p><div class="tex" data-rref-conditions hidden></div></article>
     <article class="card" data-square>
       <h3>Powers</h3>
       <div class="slider">
@@ -128,9 +128,13 @@ export function mount(section, am) {
     $(section, '[data-shape]').textContent = `${r.rows} rows, ${r.cols} columns${r.rank !== undefined ? `, rank ${r.rank}` : ''}${r.numeric ? '' : ' (for letters in general position)'}.`;
     tex($(section, '[data-transpose]'), r.transpose);
     tex($(section, '[data-rref]'), r.rref || '');
+    const rrefConditions = $(section, '[data-rref-conditions]');
+    rrefConditions.hidden = !r.rref || !r.rrefConditions.length;
+    tex(rrefConditions, r.rrefConditions.join(',\\quad '), false);
     $(section, '[data-rref-note]').textContent = r.numeric
       ? 'Row operations until each row starts with a 1 that is alone in its column; the rows left are a basis of the row space.'
-      : 'Shown for matrices of numbers. With letters, AngouriMath’s elimination does not check whether a pivot is zero (for [[a, b], [c, d]] it divides by c − c·a/a), so its answer is not usable.';
+      : 'Row operations until each row starts with a 1 that is alone in its column, for the letters in general position: a pivot that is a formula is divided by, as if it were not zero.'
+        + (r.rrefConditions.length ? ' AngouriMath states the form provided:' : '');
 
     if (square) {
       tex($(section, '[data-det]'), r.det);
@@ -142,8 +146,8 @@ export function mount(section, am) {
       $(section, '[data-inverse-note]').textContent = !r.inverse
         ? 'The determinant is 0, so A has no inverse.'
         : r.inverseConditions.length
-          ? 'The inverse exists wherever det A ≠ 0. AngouriMath’s elimination divides by entries on the way, so it states the inverse provided:'
-          : 'A A⁻¹ = I.';
+          ? 'AngouriMath states the inverse provided:'
+          : r.numeric ? 'A A⁻¹ = I.' : 'A A⁻¹ = I wherever det A ≠ 0: the adjugate over the determinant.';
       tex($(section, '[data-charpoly]'), r.charpoly ? `${r.charpoly} = 0` : '');
       showEigen(r);
       power();
@@ -307,5 +311,5 @@ export function mount(section, am) {
   new ResizeObserver(draw).observe(canvas);
 
   if (!fromLink()) pick(PRESETS[0]);
-  return { show() { fromLink(); draw(); }, hide() {} };
+  return { show() { fromLink(); draw(); }, hide() {}, restarted: () => analyze() };
 }

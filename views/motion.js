@@ -320,5 +320,5 @@ export function mount(section, am) {
   $(section, '[data-reset]').addEventListener('click', reset);
 
   derive(input.value);
-  return { show: () => animation.start(), hide: () => animation.stop() };
+  return { show: () => animation.start(), hide: () => animation.stop(), restarted: () => derive(input.value) };
 }

@@ -1,7 +1,7 @@
 import { createAngouri } from './am.js';
 
-// Each demo is a module with mount(section, am) returning { show(), hide() }; it is loaded the
-// first time its tab opens.
+// Each demo is a module with mount(section, am) returning { show(), hide() }, and restarted() if it
+// keeps something in the worker that a restart loses; it is loaded the first time its tab opens.
 const VIEWS = {
   waves: () => import('./views/waves.js'),
   forms: () => import('./views/representations.js'),
@@ -22,6 +22,7 @@ const am = createAngouri((status) => {
     const size = status.bytes > 0 ? `, ${(status.bytes / 1e6).toFixed(1)} MB` : '';
     runtime.textContent = `AngouriMath ready in ${status.seconds.toFixed(1)} s${size}, running in this tab`;
     runtime.title = 'AngouriMath runs here as WebAssembly, in a background worker. Nothing is sent to a server.';
+    if (status.restarted) for (const { view } of mounted.values()) view?.restarted?.();
   } else if (status.state === 'restarting') runtime.textContent = 'Restarting AngouriMath';
   else if (status.state === 'failed') runtime.textContent = `AngouriMath could not start: ${status.error}`;
 });

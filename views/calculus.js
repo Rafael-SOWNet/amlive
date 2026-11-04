@@ -449,5 +449,5 @@ export function mount(section, am) {
   ro.observe(canvas);
 
   pick(PRESETS[0]);
-  return { show: () => draw(), hide() {} };
+  return { show: () => draw(), hide() {}, restarted: () => analyze(input.value) };
 }
