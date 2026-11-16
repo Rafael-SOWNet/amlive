@@ -11,6 +11,16 @@ const PRESETS = [
   { label: 'Shared parts', formula: '(x + 1)^2 - x^2 + sqrt((x + 1)^2 + 1)' },
   { label: 'A cubic', formula: 'x^3 - 6x^2 + 11x - 6' },
   { label: 'Fractions', formula: '1/(x - 1) + 1/(x + 1)' },
+  { label: 'Roots in an interval', formula: 'sin(x) = 1/2 and x in [0; 2pi]' },
+];
+
+// Two formulas each, for the question whether they are equal.
+const PAIRS = [
+  { label: 'Proved', formula: 'sin(x)^2 + cos(x)^2', other: '1' },
+  { label: 'Proved, with conditions', formula: 'tan(x)', other: 'sin(x) / cos(x)' },
+  { label: 'Refuted at a point', formula: 'sqrt(x^2)', other: 'x' },
+  { label: 'Refuted off the real line', formula: 'abs(x)^2', other: 'x^2' },
+  { label: 'Not decided', formula: '(x + 1)^2', other: 'x^2 + 2x + 1' },
 ];
 
 const MARKUP = `
@@ -30,9 +40,17 @@ const MARKUP = `
     <article class="card"><h3>Rendered</h3><div class="tex" data-latex></div></article>
     <article class="card"><h3>Simplified by AngouriMath</h3><div class="tex" data-simplified></div><p class="foot" data-simplified-text></p></article>
     <article class="card wide"><h3>Other forms</h3><div class="forms" data-forms></div></article>
+    <article class="card wide">
+      <h3>Equal to a second formula?</h3>
+      <div class="formula"><span aria-hidden="true">≟</span><input id="forms-other" aria-label="A second formula to compare with" placeholder="a second formula" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+      <div class="presets" role="group" aria-label="Pairs to compare" data-pairs></div>
+      <div class="forms" data-equal></div>
+      <p class="foot" data-equal-note></p>
+    </article>
     <article class="card wide"><h3 data-picture-title>Picture</h3><div data-picture></div><p class="foot" data-picture-note></p></article>
     <article class="card wide"><h3>Expression tree</h3><p class="foot" data-tree-note></p><div class="scroll-x" data-tree></div></article>
     <article class="card"><h3>Text, as AngouriMath prints it</h3><pre data-text></pre></article>
+    <article class="card"><h3>Text in Unicode</h3><pre data-unicode></pre><p class="foot">Printed under MathS.Settings.UnicodeOutput. The parser reads every glyph back.</p></article>
     <article class="card"><h3>LaTeX source</h3><pre data-latex-source></pre></article>
     <article class="card"><h3>SymPy</h3><pre data-sympy></pre></article>
     <article class="card" data-shader-card><h3>Shader</h3>${CODE_BLOCK}</article>
@@ -46,15 +64,27 @@ export function mount(section, am) {
   const setCode = codeBlock($(section, '[data-shader-card]'));
   let picture = null;
 
+  const other = $(section, '#forms-other');
   const press = presets($(section, '.presets'), PRESETS, (p) => {
     input.value = p.formula;
+    other.value = '';
     press(p.label);
+    pressPair(null);
+    describe();
+  });
+  const pressPair = presets($(section, '[data-pairs]'), PAIRS, (p) => {
+    input.value = p.formula;
+    other.value = p.other;
+    press(null);
+    pressPair(p.label);
     describe();
   });
   input.value = PRESETS[0].formula;
   press(PRESETS[0].label);
   const later = debounce(() => describe(), 400);
-  input.addEventListener('input', () => { press(null); later(); });
+  input.addEventListener('input', () => { press(null); pressPair(null); later(); });
+  const compareLater = debounce(() => compare(), 400);
+  other.addEventListener('input', () => { pressPair(null); compareLater(); });
 
   let generation = 0;
   async function describe() {
@@ -82,6 +112,7 @@ export function mount(section, am) {
     $(section, '[data-simplified-text]').textContent = r.simplified === r.text ? 'Already as simple as AngouriMath makes it.' : r.simplified;
     showForms($(section, '[data-forms]'), r.forms, r.text);
     $(section, '[data-text]').textContent = r.text;
+    $(section, '[data-unicode]').textContent = r.unicode || r.text;
     $(section, '[data-latex-source]').textContent = r.latex;
     $(section, '[data-sympy]').textContent = r.sympy || 'No SymPy form.';
     $(section, '[data-shader-card]').hidden = !r.glsl;
@@ -90,10 +121,34 @@ export function mount(section, am) {
     $(section, '[data-tree-note]').textContent = r.nodes === r.distinct
       ? `${r.nodes} nodes, all different.`
       : `${r.nodes} nodes, of which ${r.distinct} are different: a repeated subtree is computed once in the shader.`;
+    compare();
     picture?.dispose?.();
     picture = await drawPicture(r, mine);
   }
   describe();
+
+  let comparison = 0;
+  async function compare() {
+    const mine = ++comparison, box = $(section, '[data-equal]'), note = $(section, '[data-equal-note]');
+    const second = other.value.trim();
+    if (!second) {
+      box.replaceChildren();
+      note.textContent = 'Type a second formula, or pick a pair. AngouriMath answers equal, not equal or not decided, and says what the answer rests on.';
+      return;
+    }
+    const t0 = performance.now();
+    let r;
+    try {
+      r = await am.json('RepresentationsJs', 'Compare', [input.value, second]);
+    } catch (e) {
+      if (mine === comparison) { box.replaceChildren(); note.textContent = e.message; }
+      return;
+    }
+    if (mine !== comparison) return;
+    if (!r.ok) { box.replaceChildren(); note.textContent = r.error; return; }
+    showAnswers(box, r.answers);
+    note.textContent = `By MathS.AreEqual, with at most ${r.steps.toLocaleString('en')} steps of work for a question: ${Math.round(performance.now() - t0)} ms.`;
+  }
 
   async function drawPicture(r, mine) {
     const box = $(section, '[data-picture]'), title = $(section, '[data-picture-title]'), note = $(section, '[data-picture-note]');
@@ -164,6 +219,39 @@ function showForms(box, forms, text) {
     alternatives.lastChild.append(li);
   });
   box.append(alternatives);
+}
+
+/** MathS.AreEqual's answer in each domain: the verdict, then the proof's rules or the point that refutes. */
+function showAnswers(box, answers) {
+  const domains = { complex: 'Over the complex numbers', real: 'Over the real numbers' };
+  const verdicts = { Equal: ['ok', 'Equal'], NotEqual: ['bad', 'Not equal'], Unknown: ['warn', 'Not decided'] };
+  box.replaceChildren(...answers.map((a) => {
+    const div = document.createElement('div');
+    div.className = 'labelled';
+    const [kind, word] = verdicts[a.verdict];
+    div.innerHTML = `<span>${domains[a.domain]}</span><div><span class="chip" data-kind="${kind}">${word}</span></div>`;
+    const foot = document.createElement('p');
+    foot.className = 'foot';
+    if (a.verdict === 'Equal') {
+      foot.textContent = a.sound
+        ? 'Proved by rewrite rules that hold with no side condition.'
+        : `Proved wherever both sides have a value, by rules that carry side conditions: ${a.rules.join('; ')}.`;
+    } else if (a.verdict === 'NotEqual') {
+      if (a.atLatex) {
+        const at = document.createElement('div');
+        at.className = 'tex';
+        tex(at, a.atLatex);
+        div.append(at);
+      }
+      foot.textContent = `${a.atLatex ? 'At this point the' : 'The'} first is ${a.leftAt} and the second is ${a.rightAt}.`;
+    } else {
+      foot.textContent = a.finished
+        ? 'No proof within the rules, and no point found where the two differ. That does not say they are unequal.'
+        : 'The steps ran out before a proof or a differing point was found. That does not say they are unequal.';
+    }
+    div.append(foot);
+    return div;
+  }));
 }
 
 // ---------------------------------------------------------------- pictures

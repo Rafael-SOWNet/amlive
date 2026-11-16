@@ -16,6 +16,10 @@ const PRESETS = [
     note: 'Mersenne listed 2^67 − 1 as a prime. In 1903 Frank Nelson Cole showed that it is not by multiplying out its two factors; AngouriMath finds them by Pollard’s rho.' },
   { label: 'A complex quotient', n: '(1 + 2i) / (3 - i)', note: 'Complex fractions stay exact too.' },
   { label: 'A cube root', n: '(1 + i)^(1/3)', note: 'The principal cube root: one third of the angle, the cube root of the length.' },
+  { label: 'The Basel problem', n: 'zeta(2)',
+    note: 'The sum of 1/n² over every whole n. AngouriMath knows the zeta function exactly at the even arguments: π²/6.' },
+  { label: 'Apéry’s constant', n: 'zeta(3)', digits: 100,
+    note: 'ζ(3) has no known closed form, so it stays as written, and is evaluated to the digits asked for.' },
   { label: '√2 to 1000 digits', n: 'sqrt(2)', digits: 1000 },
 ];
 

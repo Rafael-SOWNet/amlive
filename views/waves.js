@@ -36,7 +36,7 @@ const PRESETS = [
   { label: 'Any depth', formula: 'sqrt(g k (1 - 2/(e^(2 k h) + 1)))',
     note: 'ω² = g k tanh(k h), with tanh written so that 32-bit floats never overflow.' },
   { label: 'tanh as typed', formula: 'sqrt(g k tanh(k h))',
-    note: 'AngouriMath reads tanh(x) as (e^2x − 1)/(e^2x + 1). On the GPU e^2x overflows once k h passes 44: drag the depth past 14 m.' },
+    note: 'AngouriMath reads tanh(x) as (e^2x − 1)/(e^2x + 1), and on the GPU e^2x overflows once k h passes 44. The shader printer writes the ratio as 1 − 2/(e^2x + 1), which is 1 there: drag the depth past 14 m.' },
   { label: 'Deep water', formula: 'sqrt(g k)', note: 'The depth drops out, and long waves outrun short ones.' },
   { label: 'Shallow water', formula: 'k sqrt(g h)', note: 'Every wave travels at √(g h), whatever its length.' },
   { label: 'A typo', formula: 'sqrt(g k h)', note: 'The depth in the wrong place. The units check finds where.' },

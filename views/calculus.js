@@ -5,7 +5,7 @@ const PRESETS = [
   { label: 'Cubic', formula: 'x^3 - 3x + 1', area: [-1, 1], range: [-3, 3],
     note: 'Three real roots, which AngouriMath gives exactly by Cardano’s formula: through complex cube roots, although all three are real.' },
   { label: 'sin(x)/x', formula: 'sin(x) / x', area: [0, 2], point: 1, range: [-16, 16], at: '0',
-    note: 'Roots come back as families, 2πn and π + 2πn, with the condition that excludes 0. The antiderivative is the sine integral Si.' },
+    note: 'Roots come back as a family over every whole n, 2πn and π + 2πn, with the condition that excludes 0. The antiderivative is the sine integral Si.' },
   { label: 'Gaussian bump', formula: 'x e^(-x^2)', area: [0, 2], range: [-3, 3] },
   { label: 'ln(x)/x', formula: 'ln(x) / x', area: [1, 4], point: 1, range: [-1, 9], at: '0', note: 'Defined for x > 0 only; the plot leaves the rest empty.' },
   { label: 'Double well', formula: 'x^4 - 2x^2', area: [-1, 1], range: [-2.2, 2.2] },
